@@ -115,6 +115,7 @@ function App() {
   const [editando, setEditando] = useState<number | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
   const dialogoProveedor = useRef<HTMLDialogElement>(null)
+  const [sidebarVisible, setSidebarVisible] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
@@ -315,8 +316,8 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
+    <main className={`app-shell${sidebarVisible ? ' sidebar-visible' : ' sidebar-hidden'}`}>
+      <aside className="sidebar" aria-hidden={!sidebarVisible}>
         <a className="brand" href="#" aria-label="Inicio">
           <span className="brand-mark">P</span>
           <span>provee<span className="brand-light">dores</span></span>
@@ -331,7 +332,18 @@ function App() {
 
       <section className="main-panel">
         <header className="topbar">
-          <span>Panel de gestión <span className="crumb">/ Proveedores</span></span>
+          <div className="topbar-heading">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={sidebarVisible ? 'Ocultar menú de navegación' : 'Mostrar menú de navegación'}
+              aria-expanded={sidebarVisible}
+              onClick={() => setSidebarVisible((visible) => !visible)}
+            >
+              <span aria-hidden="true">{sidebarVisible ? '×' : '☰'}</span>
+            </button>
+            <span>Panel de gestión <span className="crumb">/ Proveedores</span></span>
+          </div>
           <div className="user-menu">
             <span className="today">{new Intl.DateTimeFormat('es', { dateStyle: 'long' }).format(new Date())}</span>
             <span className="user-name">{usuario.first_name || usuario.username}</span>
@@ -342,9 +354,8 @@ function App() {
         <div className="content">
           <div className="page-heading">
             <div>
-              <p className="eyebrow">DIRECTORIO</p>
+              <p className="eyebrow">Gerencia de Tecnología</p>
               <h1>Proveedores</h1>
-              <p className="subtitle">Administra tus contratos, servicios y tarifas mensuales.</p>
             </div>
             {usuario.is_admin && <button className="button button-secondary" type="button" onClick={() => {
               cancelarEdicion()
@@ -364,7 +375,7 @@ function App() {
               <span className="summary-note">de {proveedores.length} proveedores</span>
             </article>
             <article className="summary-card">
-              <span className="summary-icon orange">∑</span>
+              <span className="summary-icon orange">$</span>
               <div><p>Tarifa mensual activa</p><strong>$ {formatoTarifa.format(gastoMensual)}</strong></div>
               <span className="summary-note">total mensual</span>
             </article>
@@ -455,7 +466,8 @@ function App() {
             </div>
             <div className="table-footer">Mostrando {visibles.length} de {proveedores.length} proveedores</div>
           </section>
-          <footer className="page-footer">Gestión de proveedores <span>•</span> Panel administrativo</footer>
+          <footer className="page-footer">Gestión de proveedores <span>•</span> Coordinación de Logistica</footer>
+          <footer className="author-footer">Elaborado por la Coordinación de Logistica</footer>
         </div>
       </section>
     </main>
