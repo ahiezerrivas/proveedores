@@ -13,19 +13,34 @@ Esta guía publica React como archivos estáticos en IIS y ejecuta Django REST F
 - NSSM disponible en el servidor.
 - Certificado HTTPS para el nombre DNS del sitio.
 
-En IIS Manager, abre **Application Request Routing Cache → Server Proxy Settings**, marca **Enable proxy** y **Preserve host header**, y aplica. Es necesario conservar el hostname para que `ALLOWED_HOSTS` y la sesión funcionen correctamente. En **URL Rewrite**, verifica que esté instalada la extensión.
+En IIS Manager, abre **Application Request Routing Cache → Server Proxy Settings**, marca **Enable proxy** y aplica. La opción **Preserve host header** puede no aparecer en esa pantalla; configúrala desde PowerShell como administrador con `appcmd`:
+
+```powershell
+$appcmd = "$env:windir\System32\inetsrv\appcmd.exe"
+& $appcmd set config -section:system.webServer/proxy /preserveHostHeader:"True" /commit:apphost
+& $appcmd list config -section:system.webServer/proxy
+```
+
+En la salida, confirma que `preserveHostHeader="true"`. Es necesario conservar el hostname para que `ALLOWED_HOSTS` y la sesión funcionen correctamente. En **URL Rewrite**, verifica que esté instalada la extensión.
 
 ## 2. Preparar una instalación independiente
 
-Despliega el código en una ruta estable, por ejemplo:
+`C:\Apps\proveedores\` es la **carpeta raíz de instalación del proyecto**, no la carpeta donde IIS publica el sitio. Coloca allí el proyecto completo, con sus carpetas `backend\` y `frontend\`; no copies solo el build del frontend. Por ejemplo:
 
 ```text
 C:\Apps\proveedores\
+├── backend\
+├── frontend\
+├── .venv\
+└── logs\
 ```
 
-No ejecutes el servicio directamente desde una carpeta temporal, una unidad de red o el perfil de un usuario que pueda cambiar. Desde PowerShell, en la raíz del proyecto:
+El build de React se generará más adelante en `C:\Apps\proveedores\frontend\dist\`, y **esa carpeta `dist\` será la raíz física del sitio IIS**. El backend, el entorno virtual y los logs permanecen fuera de la raíz publicada por IIS.
+
+Copia o despliega primero el proyecto completo en `C:\Apps\proveedores\`. No ejecutes el servicio desde una carpeta temporal, una unidad de red o el perfil de un usuario que pueda cambiar. Luego abre PowerShell y sitúate en esa carpeta:
 
 ```powershell
+Set-Location C:\Apps\proveedores
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r backend\requirements.txt
@@ -76,7 +91,7 @@ Waitress ya está incluido en `backend\requirements.txt`. Abre una consola como 
 
 ```powershell
 $root = "C:\Apps\proveedores"
-$nssm = "C:\Tools\nssm\win64\nssm.exe"
+$nssm = "C:\nssm\win64\nssm.exe"
 
 New-Item -ItemType Directory -Force "$root\logs" | Out-Null
 & $nssm install ProveedoresAPI "$root\.venv\Scripts\waitress-serve.exe"
@@ -119,11 +134,39 @@ El sitio estático final queda en `frontend\dist\`. La variable `VITE_API_URL` s
 
 ## 5. Configurar el sitio IIS
 
+### Si por ahora solo se publica el backend
+
+No cambies la ruta física de **Default Web Site** a `frontend\dist`; esa ruta corresponde a la publicación completa del frontend y se configura cuando React esté listo. Para publicar temporalmente solo API y admin mediante el sitio existente, conserva su raíz actual (`C:\inetpub\wwwroot`) y:
+
+1. Confirma que **ARR** tenga el proxy habilitado y que **URL Rewrite** esté instalado.
+2. Crea en `C:\inetpub\wwwroot\web.config` reglas de proxy solo para `/api/` y `/admin/` hacia `http://127.0.0.1:8004/`. Si ya existe ese archivo, integra las reglas sin reemplazar su configuración existente:
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <configuration>
+     <system.webServer>
+       <rewrite>
+         <rules>
+           <rule name="Proxy API and Django admin to Waitress" stopProcessing="true">
+             <match url="^(api/.*|admin/.*)$" />
+             <action type="Rewrite" url="http://127.0.0.1:8004/{R:1}" appendQueryString="true" />
+           </rule>
+         </rules>
+       </rewrite>
+     </system.webServer>
+   </configuration>
+   ```
+
+3. Bajo **Default Web Site**, agrega un directorio virtual con alias `static` y ruta física `C:\Apps\proveedores\backend\staticfiles`. La identidad del grupo de aplicaciones necesita permiso de lectura.
+4. Accede a `http(s)://<nombre-del-sitio>/admin/` y comprueba que carguen los estilos. Configura HTTPS antes de permitir el acceso desde otras máquinas o introducir credenciales; la captura actual muestra un enlace HTTP.
+
+Esta configuración no publica React. Cuando despliegues el frontend, sigue los pasos de publicación completa de abajo y usa `frontend\dist` como raíz del sitio.
+
 1. Crea un sitio IIS llamado `Proveedores` con raíz física en `C:\Apps\proveedores\frontend\dist`.
 2. Añade el binding HTTPS para `proveedores.empresa.local` y selecciona el certificado TLS.
 3. Fuerza HTTPS desde IIS o el balanceador. No publiques el login por HTTP.
 4. Comprueba que `frontend\dist\web.config` exista. Vite lo copia desde `frontend\public\web.config`. Las reglas envían `/api/...` y `/admin/...` a Waitress y sirven React para las rutas del frontend.
-5. En **ARR → Server Proxy Settings**, confirma que el proxy esté habilitado.
+5. En **ARR → Server Proxy Settings**, confirma que el proxy esté habilitado. Comprueba también `preserveHostHeader="true"` con el comando `appcmd` del apartado 1.
 6. Crea un directorio virtual IIS `/static` apuntando a `C:\Apps\proveedores\backend\staticfiles`. Así se sirven los estilos del admin de Django. Dale a la identidad del grupo de aplicaciones permiso de lectura sobre esa carpeta.
 7. En el firewall, permite HTTPS al sitio desde las redes autorizadas. No abras el puerto 8004.
 
@@ -172,4 +215,4 @@ Comprueba el login, operaciones CRUD según el rol, el acceso al admin, la vista
 - **403 CSRF:** entra por HTTPS usando el mismo hostname definido en `CSRF_TRUSTED_ORIGINS`; reinicia NSSM tras cambiar `.env` y borra las cookies antiguas del navegador.
 - **Admin sin estilos:** revisa `collectstatic`, el directorio virtual `/static` y sus permisos de lectura.
 - **PDF no se carga:** confirma el límite del proxy, los permisos de escritura del servicio en `backend\private_uploads\` y el espacio disponible.
-- **No iniciar:** consulta el Visor de eventos y `logs\waitress-error.log`; confirma que la cuenta del servicio puede leer `.env` y conectarse a PostgreSQL.
+- **No iniciar:** comprueba primero que exista `C:\Apps\proveedores\.venv\Scripts\waitress-serve.exe`; si no existe, crea el entorno virtual e instala `backend\requirements.txt` como se indica en el apartado 2. Luego revisa `logs\waitress-error.log` y el Visor de eventos, y confirma que la cuenta del servicio puede leer `.env` y conectarse a PostgreSQL.

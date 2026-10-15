@@ -15,6 +15,21 @@ class Proveedor(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(0)],
     )
+    tarifa_trimestral = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    tarifa_semestral = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    tarifa_anual = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
     servicios = models.TextField()
     estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.ACTIVO)
     documento_pdf = models.FileField(

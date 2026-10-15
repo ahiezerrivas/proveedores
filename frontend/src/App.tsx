@@ -7,6 +7,9 @@ type Proveedor = {
   proveedor: string
   contrato: string
   tarifa_mensual: string
+  tarifa_trimestral: string
+  tarifa_semestral: string
+  tarifa_anual: string
   servicios: string
   estado: Estado
   tiene_pdf: boolean
@@ -14,6 +17,7 @@ type Proveedor = {
 }
 
 type Formulario = Omit<Proveedor, 'id' | 'tiene_pdf' | 'pdf_url'>
+type TarifaCampo = 'tarifa_mensual' | 'tarifa_trimestral' | 'tarifa_semestral' | 'tarifa_anual'
 type Usuario = {
   id: number
   username: string
@@ -39,6 +43,9 @@ const formularioVacio: Formulario = {
   proveedor: '',
   contrato: '',
   tarifa_mensual: '',
+  tarifa_trimestral: '',
+  tarifa_semestral: '',
+  tarifa_anual: '',
   servicios: '',
   estado: 'Activo',
 }
@@ -83,11 +90,12 @@ function LoginPage({ onLogin, busy, error }: LoginPageProps) {
   return (
     <main className="login-screen">
       <section className="login-card">
-        <a className="brand login-brand" href="#" aria-label="Gestión de proveedores">
-          <span className="brand-mark">P</span>
-          <span>provee<span className="brand-light">dores</span></span>
-        </a>
-        <p className="eyebrow">ACCESO SEGURO</p>
+          
+      
+          <span>Proveedores</span>
+        
+    
+        
         <h1>Inicia sesión</h1>
         <p className="subtitle">Ingresa con la cuenta que te asignó el administrador.</p>
         {error && <div className="error-banner login-error" role="alert">{error}</div>}
@@ -108,10 +116,15 @@ function App() {
   const [loginError, setLoginError] = useState('')
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [formulario, setFormulario] = useState<Formulario>(formularioVacio)
-  const [tarifaEnfocada, setTarifaEnfocada] = useState(false)
+  const [tarifaEnfocada, setTarifaEnfocada] = useState<TarifaCampo | null>(null)
   const [archivoPdf, setArchivoPdf] = useState<File | null>(null)
   const inputPdf = useRef<HTMLInputElement>(null)
-  const inputTarifa = useRef<HTMLInputElement>(null)
+  const inputTarifas = useRef<Record<TarifaCampo, HTMLInputElement | null>>({
+    tarifa_mensual: null,
+    tarifa_trimestral: null,
+    tarifa_semestral: null,
+    tarifa_anual: null,
+  })
   const [editando, setEditando] = useState<number | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
   const dialogoProveedor = useRef<HTMLDialogElement>(null)
@@ -205,16 +218,23 @@ function App() {
       .includes(busqueda.toLocaleLowerCase('es')),
   )
   const activos = proveedores.filter((item) => item.estado === 'Activo').length
-  const gastoMensual = proveedores
-    .filter((item) => item.estado === 'Activo')
-    .reduce((suma, item) => suma + Number(item.tarifa_mensual), 0)
+  const proveedoresActivos = proveedores.filter((item) => item.estado === 'Activo')
+  const resumenTarifas = ([
+    ['Mensual', 'tarifa_mensual'],
+    ['Trimestral', 'tarifa_trimestral'],
+    ['Semestral', 'tarifa_semestral'],
+    ['Anual', 'tarifa_anual'],
+  ] as const).map(([periodo, campo]) => ({
+    periodo,
+    total: proveedoresActivos.reduce((suma, item) => suma + Number(item[campo]), 0),
+  }))
 
   function cambiarCampo(campo: keyof Formulario, valor: string) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
   }
 
-  function cambiarTarifa(valor: string) {
-    const input = inputTarifa.current
+  function cambiarTarifa(campo: TarifaCampo, valor: string) {
+    const input = inputTarifas.current[campo]
     const posicion = input?.selectionStart ?? valor.length
     const antesDelCursor = valor.slice(0, posicion)
     const digitosAntes = (antesDelCursor.match(/\d/g) ?? []).length
@@ -228,7 +248,7 @@ function App() {
     const enteroAgrupado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
     const visual = `${enteroAgrupado}${tieneComa ? `,${decimales}` : ''}`
 
-    cambiarCampo('tarifa_mensual', canonico)
+    cambiarCampo(campo, canonico)
     if (input) {
       requestAnimationFrame(() => {
         let nuevaPosicion = 0
@@ -252,6 +272,9 @@ function App() {
       proveedor: item.proveedor,
       contrato: item.contrato,
       tarifa_mensual: item.tarifa_mensual,
+      tarifa_trimestral: item.tarifa_trimestral,
+      tarifa_semestral: item.tarifa_semestral,
+      tarifa_anual: item.tarifa_anual,
       servicios: item.servicios,
       estado: item.estado,
     })
@@ -272,7 +295,9 @@ function App() {
     try {
       const datos = new FormData()
       Object.entries(formulario).forEach(([campo, valor]) => datos.append(campo, valor))
-      datos.set('tarifa_mensual', String(Number(formulario.tarifa_mensual)))
+      ;(['tarifa_mensual', 'tarifa_trimestral', 'tarifa_semestral', 'tarifa_anual'] as const).forEach((campo) => {
+        datos.set(campo, String(Number(formulario[campo])))
+      })
       if (archivoPdf) datos.append('archivo_pdf', archivoPdf)
       const response = await fetch(editando ? `${API_URL}${editando}/` : API_URL, {
         method: editando ? 'PUT' : 'POST',
@@ -374,10 +399,19 @@ function App() {
               <div><p>Contratos activos</p><strong>{activos}</strong></div>
               <span className="summary-note">de {proveedores.length} proveedores</span>
             </article>
-            <article className="summary-card">
-              <span className="summary-icon orange">$</span>
-              <div><p>Tarifa mensual activa</p><strong>$ {formatoTarifa.format(gastoMensual)}</strong></div>
-              <span className="summary-note">total mensual</span>
+            <article className="summary-card tariff-summary">
+              <div className="tariff-summary-heading">
+                <span className="summary-icon orange">$</span>
+                <div><p>Tarifas activas</p></div>
+              </div>
+              <div className="tariff-summary-list">
+                {resumenTarifas.map(({ periodo, total }) => (
+                  <div className="tariff-summary-item" key={periodo}>
+                    <span>{periodo}</span>
+                    <strong>$ {formatoTarifa.format(total)}</strong>
+                  </div>
+                ))}
+              </div>
             </article>
           </div>
 
@@ -412,7 +446,14 @@ function App() {
               <div className="form-grid">
                 <label>Proveedor<input required maxLength={200} value={formulario.proveedor} onChange={(event) => cambiarCampo('proveedor', event.target.value)} placeholder="Nombre del proveedor" /></label>
                 <label>Contrato<input required maxLength={120} value={formulario.contrato} onChange={(event) => cambiarCampo('contrato', event.target.value)} placeholder="N.º o nombre del contrato" /></label>
-                <label>Tarifa mensual<div className="currency-input"><span aria-hidden="true">$</span><input ref={inputTarifa} required inputMode="decimal" type="text" value={tarifaEnfocada || !formulario.tarifa_mensual ? formatoTarifaEnEdicion(formulario.tarifa_mensual) : formatoTarifa.format(Number(formulario.tarifa_mensual))} onFocus={() => setTarifaEnfocada(true)} onBlur={() => setTarifaEnfocada(false)} onChange={(event) => cambiarTarifa(event.target.value)} placeholder="0,00" aria-label="Tarifa mensual en dólares" /></div></label>
+                {([
+                  ['tarifa_mensual', 'Tarifa mensual'],
+                  ['tarifa_trimestral', 'Tarifa trimestral'],
+                  ['tarifa_semestral', 'Tarifa semestral'],
+                  ['tarifa_anual', 'Tarifa anual'],
+                ] as const).map(([campo, etiqueta]) => (
+                  <label key={campo}>{etiqueta}<div className="currency-input"><span aria-hidden="true">$</span><input ref={(input) => { inputTarifas.current[campo] = input }} required inputMode="decimal" type="text" value={tarifaEnfocada === campo || !formulario[campo] ? formatoTarifaEnEdicion(formulario[campo]) : formatoTarifa.format(Number(formulario[campo]))} onFocus={() => setTarifaEnfocada(campo)} onBlur={() => setTarifaEnfocada(null)} onChange={(event) => cambiarTarifa(campo, event.target.value)} placeholder="0,00" aria-label={`${etiqueta} en dólares`} /></div></label>
+                ))}
                 <label>Estado<select value={formulario.estado} onChange={(event) => cambiarCampo('estado', event.target.value as Estado)}><option>Activo</option><option>Pendiente</option><option>Inactivo</option></select></label>
                 <label className="services-field">Servicios<textarea required rows={2} value={formulario.servicios} onChange={(event) => cambiarCampo('servicios', event.target.value)} placeholder="Describe los servicios contratados" /></label>
                 <label className="pdf-field">Adjuntar PDF <span className="field-hint">Opcional · máximo 10 MB</span><input ref={inputPdf} accept=".pdf,application/pdf" type="file" onChange={(event) => {
@@ -448,13 +489,16 @@ function App() {
             </div>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>PROVEEDOR</th><th>CONTRATO</th><th>TARIFA MENSUAL</th><th>SERVICIOS</th><th>ESTADO</th><th>PDF</th><th>ACCIONES</th></tr></thead>
+                <thead><tr><th>PROVEEDOR</th><th>CONTRATO</th><th>MENSUAL</th><th>TRIMESTRAL</th><th>SEMESTRAL</th><th>ANUAL</th><th>SERVICIOS</th><th>ESTADO</th><th>PDF</th><th>ACCIONES</th></tr></thead>
                 <tbody>
-                  {cargando ? <tr><td className="empty-state" colSpan={7}>Cargando proveedores…</td></tr> : visibles.length === 0 ? <tr><td className="empty-state" colSpan={7}>{proveedores.length ? 'No hay resultados para esta búsqueda.' : 'Aún no hay proveedores. Agrega el primero en el formulario.'}</td></tr> : visibles.map((item) => (
+                  {cargando ? <tr><td className="empty-state" colSpan={10}>Cargando proveedores…</td></tr> : visibles.length === 0 ? <tr><td className="empty-state" colSpan={10}>{proveedores.length ? 'No hay resultados para esta búsqueda.' : 'Aún no hay proveedores. Agrega el primero en el formulario.'}</td></tr> : visibles.map((item) => (
                     <tr key={item.id}>
                       <td><span className="provider-name">{item.proveedor}</span></td>
                       <td>{item.contrato}</td>
                       <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_mensual))}</td>
+                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_trimestral))}</td>
+                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_semestral))}</td>
+                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_anual))}</td>
                       <td className="services-cell">{item.servicios}</td>
                       <td><span className={`status status-${item.estado.toLocaleLowerCase('es')}`}>{item.estado}</span></td>
                       <td>{item.tiene_pdf && item.pdf_url ? <span className="pdf-actions"><a href={item.pdf_url} target="_blank" rel="noopener noreferrer">Ver PDF</a></span> : <span className="no-pdf">Sin PDF</span>}</td>

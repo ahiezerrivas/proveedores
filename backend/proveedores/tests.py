@@ -15,6 +15,9 @@ class ProveedorModelTests(TestCase):
             proveedor="Servicios del Norte",
             contrato="CT-2026-01",
             tarifa_mensual="250.00",
+            tarifa_trimestral="700.00",
+            tarifa_semestral="1300.00",
+            tarifa_anual="2400.00",
             servicios="Soporte técnico",
         )
         self.assertEqual(str(proveedor), "Servicios del Norte — CT-2026-01")
@@ -45,6 +48,9 @@ class ProveedorPermissionTests(TestCase):
             proveedor="Servicios del Norte",
             contrato="CT-2026-01",
             tarifa_mensual="250.00",
+            tarifa_trimestral="700.00",
+            tarifa_semestral="1300.00",
+            tarifa_anual="2400.00",
             servicios="Soporte técnico",
         )
         response = self.client.post(
@@ -53,6 +59,9 @@ class ProveedorPermissionTests(TestCase):
                 "proveedor": "Servicios del Norte",
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
+                "tarifa_trimestral": "700.00",
+                "tarifa_semestral": "1300.00",
+                "tarifa_anual": "2400.00",
                 "servicios": "Soporte técnico",
                 "estado": "Activo",
             },
@@ -76,11 +85,17 @@ class ProveedorPermissionTests(TestCase):
                 "proveedor": "Servicios del Norte",
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
+                "tarifa_trimestral": "700.00",
+                "tarifa_semestral": "1300.00",
+                "tarifa_anual": "2400.00",
                 "servicios": "Soporte técnico",
                 "estado": "Activo",
             },
         )
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["tarifa_trimestral"], "700.00")
+        self.assertEqual(response.data["tarifa_semestral"], "1300.00")
+        self.assertEqual(response.data["tarifa_anual"], "2400.00")
         proveedor_url = f"{self.url}{response.data['id']}/"
         self.assertEqual(
             self.client.patch(proveedor_url, {"estado": "Inactivo"}, format="json").status_code,
@@ -96,6 +111,9 @@ class ProveedorPermissionTests(TestCase):
                 "proveedor": "Servicios del Norte",
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
+                "tarifa_trimestral": "700.00",
+                "tarifa_semestral": "1300.00",
+                "tarifa_anual": "2400.00",
                 "servicios": "Soporte técnico",
                 "estado": "Activo",
                 "archivo_pdf": SimpleUploadedFile(
@@ -122,6 +140,9 @@ class ProveedorPermissionTests(TestCase):
                 "proveedor": "Servicios del Norte",
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
+                "tarifa_trimestral": "700.00",
+                "tarifa_semestral": "1300.00",
+                "tarifa_anual": "2400.00",
                 "servicios": "Soporte técnico",
                 "estado": "Activo",
                 "archivo_pdf": SimpleUploadedFile(
@@ -143,6 +164,9 @@ class ProveedorPermissionTests(TestCase):
                 "proveedor": "Servicios del Norte",
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
+                "tarifa_trimestral": "700.00",
+                "tarifa_semestral": "1300.00",
+                "tarifa_anual": "2400.00",
                 "servicios": "Soporte técnico",
                 "estado": "Activo",
                 "archivo_pdf": SimpleUploadedFile(

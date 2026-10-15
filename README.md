@@ -2,7 +2,7 @@
 
 Proyecto inicial con Django REST Framework, React y PostgreSQL. Permite listar, buscar, crear, editar y eliminar proveedores.
 
-Los campos almacenados son proveedor, contrato, tarifa mensual, servicios y estado. **Acciones** es la columna de controles (editar/eliminar) del frontend, no un campo de la base de datos.
+Los campos almacenados son proveedor, contrato, tarifas mensual, trimestral, semestral y anual, servicios y estado. Los registros existentes reciben inicialmente `0.00` en las tres nuevas tarifas; actualiza esos valores desde el formulario según corresponda. **Acciones** es la columna de controles (editar/eliminar) del frontend, no un campo de la base de datos.
 
 El panel muestra los montos con el símbolo `$`. El directorio y sus controles usan tipografía ampliada para facilitar la lectura. Cada proveedor puede tener un PDF adjunto opcional (hasta 10 MB); solo usuarios con sesión iniciada pueden descargarlo y el backend valida que el contenido sea PDF. Los archivos se guardan en `backend/private_uploads/`, fuera de las rutas públicas de archivos estáticos.
 
@@ -32,7 +32,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-La API queda en `http://localhost:8000/api/proveedores/`. El acceso a la API requiere iniciar sesión. La tarifa se almacena como número decimal, sin fijar moneda.
+La API queda en `http://localhost:8000/api/proveedores/`. El acceso a la API requiere iniciar sesión. Las tarifas se almacenan como números decimales, sin fijar moneda.
 
 ### Usuarios y roles
 
@@ -44,7 +44,7 @@ Crea la cuenta inicial de administración después de aplicar las migraciones:
 python manage.py createsuperuser
 ```
 
-Al actualizar el proyecto, vuelve a ejecutar las migraciones para crear la columna y habilitar el campo para adjuntar PDF:
+Al actualizar el proyecto, vuelve a ejecutar las migraciones para crear las nuevas columnas de tarifas y habilitar el campo para adjuntar PDF:
 
 ```powershell
 python manage.py migrate
