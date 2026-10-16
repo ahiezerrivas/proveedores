@@ -22,7 +22,7 @@ Para detener los servidores actuales, primero revisa que procesos ocupan los pue
 
 ```powershell
 Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
-  Where-Object { $_.LocalPort -in 8004, 5177 } |
+  Where-Object { $_.LocalPort -in 8004, 5176 } |
   ForEach-Object {
     Get-CimInstance Win32_Process -Filter "ProcessId = $($_.OwningProcess)" |
       Select-Object ProcessId, Name, CommandLine
