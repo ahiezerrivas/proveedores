@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import LoginPage from './components/LoginPage'
 import ProviderFormDialog from './components/ProviderFormDialog'
+import ProviderManagementDialog from './components/ProviderManagementDialog'
 import ProviderSummary from './components/ProviderSummary'
 import ProviderTable from './components/ProviderTable'
 import type { Contrato, Formulario, Proveedor, Usuario } from './types'
@@ -17,6 +18,9 @@ function App() {
   const [archivoPdf, setArchivoPdf] = useState<File | null>(null)
   const [editando, setEditando] = useState<number | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [modalProveedoresAbierto, setModalProveedoresAbierto] = useState(false)
+  const [eliminandoProveedorId, setEliminandoProveedorId] = useState<number | null>(null)
+  const [errorEliminarProveedor, setErrorEliminarProveedor] = useState('')
   const [sidebarVisible, setSidebarVisible] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(true)
@@ -110,6 +114,11 @@ function App() {
       .toLocaleLowerCase('es')
       .includes(busqueda.toLocaleLowerCase('es')),
   )
+  const contratosPorProveedor = new Map<number, number>()
+  contratos.forEach(({ proveedor }) => {
+    contratosPorProveedor.set(proveedor.id, (contratosPorProveedor.get(proveedor.id) ?? 0) + 1)
+  })
+
   function cambiarCampo(campo: keyof Formulario, valor: string) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
   }
@@ -195,6 +204,25 @@ function App() {
     }
   }
 
+  async function eliminarProveedor(proveedor: Proveedor) {
+    if (!window.confirm(`¿Eliminar al proveedor ${proveedor.nombre}? Esta acción no se puede deshacer.`)) return
+    setEliminandoProveedorId(proveedor.id)
+    setErrorEliminarProveedor('')
+    try {
+      const response = await fetch(`${PROVEEDORES_URL}${proveedor.id}/`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'X-CSRFToken': csrfToken() },
+      })
+      if (!response.ok) await respuestaJson<unknown>(response)
+      setProveedores((actuales) => actuales.filter((item) => item.id !== proveedor.id))
+    } catch (err) {
+      setErrorEliminarProveedor(err instanceof Error ? err.message : 'No se pudo eliminar el proveedor.')
+    } finally {
+      setEliminandoProveedorId(null)
+    }
+  }
+
   if (sesionCargando) {
     return <main className="login-screen"><p className="subtitle">Comprobando sesión…</p></main>
   }
@@ -252,7 +280,24 @@ function App() {
             }}>＋ Nuevo contrato</button>}
           </div>
 
-          <ProviderSummary proveedores={proveedores} contratos={contratos} />
+          <ProviderSummary
+            proveedores={proveedores}
+            contratos={contratos}
+            onManageProviders={usuario.is_admin ? () => {
+              setErrorEliminarProveedor('')
+              setModalProveedoresAbierto(true)
+            } : undefined}
+          />
+
+          {usuario.is_admin && <ProviderManagementDialog
+            open={modalProveedoresAbierto}
+            proveedores={proveedores}
+            contratosPorProveedor={contratosPorProveedor}
+            eliminandoId={eliminandoProveedorId}
+            error={errorEliminarProveedor}
+            onClose={() => setModalProveedoresAbierto(false)}
+            onDelete={(proveedor) => void eliminarProveedor(proveedor)}
+          />}
 
           {error && (
             <div className="error-banner" role="alert">

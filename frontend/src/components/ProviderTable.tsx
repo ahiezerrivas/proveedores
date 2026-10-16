@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { Contrato } from '../types'
 import { formatoTarifa } from '../utils'
 
@@ -27,17 +28,32 @@ export default function ProviderTable({
   onEditar,
   onEliminar,
 }: ProviderTableProps) {
+  const [estadoSeleccionado, setEstadoSeleccionado] = useState('')
+  const filtrados = visibles.filter((contrato) =>
+    !estadoSeleccionado || contrato.estado === estadoSeleccionado,
+  )
+
   return (
     <section className="table-card" id="lista">
       <div className="section-heading table-heading">
         <div><h2>Contratos de proveedores</h2><p>{esAdministrador ? 'Consulta y administra los contratos registrados.' : 'Consulta los contratos registrados.'}</p></div>
-        <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Buscar proveedores" value={busqueda} onChange={(event) => onBusquedaChange(event.target.value)} placeholder="Buscar proveedor..." /></label>
+        <div className="table-filters">
+          <label className="status-filter">Estado
+            <select aria-label="Filtrar por estado" value={estadoSeleccionado} onChange={(event) => setEstadoSeleccionado(event.target.value)}>
+              <option value="">Todos</option>
+              <option value="Activo">Activo</option>
+              <option value="Pendiente">Pendiente</option>
+              <option value="Inactivo">Inactivo</option>
+            </select>
+          </label>
+          <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Buscar proveedores" value={busqueda} onChange={(event) => onBusquedaChange(event.target.value)} placeholder="Buscar proveedor..." /></label>
+        </div>
       </div>
       <div className="table-wrap">
         <table>
           <thead><tr><th>PROVEEDOR</th><th>CONTRATO</th><th>MENSUAL</th><th>TRIMESTRAL</th><th>SEMESTRAL</th><th>ANUAL</th><th>SERVICIOS</th><th>ESTADO</th><th>PDF</th><th>ACCIONES</th></tr></thead>
           <tbody>
-            {cargando ? <tr><td className="empty-state" colSpan={10}>Cargando contratos…</td></tr> : visibles.length === 0 ? <tr><td className="empty-state" colSpan={10}>{contratos.length ? 'No hay resultados para esta búsqueda.' : 'Aún no hay contratos. Agrega el primero en el formulario.'}</td></tr> : visibles.map((item) => (
+            {cargando ? <tr><td className="empty-state" colSpan={10}>Cargando contratos…</td></tr> : filtrados.length === 0 ? <tr><td className="empty-state" colSpan={10}>{contratos.length ? 'No hay contratos que coincidan con los filtros.' : 'Aún no hay contratos. Agrega el primero en el formulario.'}</td></tr> : filtrados.map((item) => (
               <tr key={item.id}>
                 <td><span className="provider-name">{item.proveedor.nombre}</span>{item.proveedor.codigo && <small className="provider-code">{item.proveedor.codigo}</small>}</td>
                 <td>{item.contrato}</td>
@@ -54,7 +70,7 @@ export default function ProviderTable({
           </tbody>
         </table>
       </div>
-      <div className="table-footer">Mostrando {visibles.length} de {contratos.length} contratos</div>
+      <div className="table-footer">Mostrando {filtrados.length} de {contratos.length} contratos</div>
     </section>
   )
 }

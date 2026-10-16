@@ -167,6 +167,28 @@ class ProveedorPermissionTests(TestCase):
             403,
         )
         self.assertEqual(self.client.delete(f"{self.url}{contrato.pk}/").status_code, 403)
+        self.assertEqual(self.client.delete(f"{self.proveedores_url}{self.proveedor.pk}/").status_code, 403)
+
+    def test_admin_can_delete_supplier_without_contracts(self):
+        self.client.force_authenticate(self.administrador)
+
+        response = self.client.delete(f"{self.proveedores_url}{self.proveedor.pk}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Proveedor.objects.filter(pk=self.proveedor.pk).exists())
+
+    def test_admin_cannot_delete_supplier_with_contracts(self):
+        Contrato.objects.create(proveedor=self.proveedor, contrato="CT-2026-01")
+        self.client.force_authenticate(self.administrador)
+
+        response = self.client.delete(f"{self.proveedores_url}{self.proveedor.pk}/")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.data["detail"],
+            "No se puede eliminar este proveedor porque tiene contratos asociados.",
+        )
+        self.assertTrue(Proveedor.objects.filter(pk=self.proveedor.pk).exists())
 
     def test_administradores_role_can_create_edit_and_delete(self):
         self.client.force_authenticate(self.administrador)

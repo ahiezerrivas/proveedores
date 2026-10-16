@@ -4,6 +4,7 @@ import { formatoTarifa } from '../utils'
 type ProviderSummaryProps = {
   proveedores: Proveedor[]
   contratos: Contrato[]
+  onManageProviders?: () => void
 }
 
 const camposTarifa = [
@@ -13,7 +14,7 @@ const camposTarifa = [
   ['Anual', 'tarifa_anual'],
 ] as const
 
-export default function ProviderSummary({ proveedores, contratos }: ProviderSummaryProps) {
+export default function ProviderSummary({ proveedores, contratos, onManageProviders }: ProviderSummaryProps) {
   const activos = contratos.filter((item) => item.estado === 'Activo')
   const resumenTarifas = camposTarifa.map(([periodo, campo]) => ({
     periodo,
@@ -22,11 +23,19 @@ export default function ProviderSummary({ proveedores, contratos }: ProviderSumm
 
   return (
     <div className="summary-grid">
-      <article className="summary-card">
-        <span className="summary-icon purple">▦</span>
-        <div><p>Total proveedores</p><strong>{proveedores.length}</strong></div>
-        <span className="summary-note">registrados</span>
-      </article>
+      {onManageProviders ? (
+        <button className="summary-card provider-summary-trigger" type="button" onClick={onManageProviders} aria-label="Administrar proveedores">
+          <span className="summary-icon purple">▦</span>
+          <div><p>Total proveedores</p><strong>{proveedores.length}</strong></div>
+          <span className="summary-note">Ver y eliminar proveedores</span>
+        </button>
+      ) : (
+        <article className="summary-card">
+          <span className="summary-icon purple">▦</span>
+          <div><p>Total proveedores</p><strong>{proveedores.length}</strong></div>
+          <span className="summary-note">registrados</span>
+        </article>
+      )}
       <article className="summary-card">
         <span className="summary-icon green">✓</span>
         <div><p>Contratos activos</p><strong>{activos.length}</strong></div>

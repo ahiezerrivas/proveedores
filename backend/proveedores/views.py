@@ -1,5 +1,6 @@
 from django.http import FileResponse
-from rest_framework import viewsets
+from django.db.models.deletion import ProtectedError
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.response import Response
@@ -20,10 +21,30 @@ class EsAdministradorOConsulta(BasePermission):
         ).exists()
 
 
-class ProveedorViewSet(viewsets.ReadOnlyModelViewSet):
+class ProveedorViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
     permission_classes = [EsAdministradorOConsulta]
+
+    def destroy(self, request, *args, **kwargs):
+        proveedor = self.get_object()
+        if proveedor.contratos.exists():
+            return Response(
+                {"detail": "No se puede eliminar este proveedor porque tiene contratos asociados."},
+                status=status.HTTP_409_CONFLICT,
+            )
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "No se puede eliminar este proveedor porque tiene contratos asociados."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
 
 class ContratoViewSet(viewsets.ModelViewSet):
