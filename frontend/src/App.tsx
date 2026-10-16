@@ -1,113 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-
-type Estado = 'Activo' | 'Pendiente' | 'Inactivo'
-
-type Proveedor = {
-  id: number
-  proveedor: string
-  contrato: string
-  tarifa_mensual: string
-  tarifa_trimestral: string
-  tarifa_semestral: string
-  tarifa_anual: string
-  servicios: string
-  estado: Estado
-  tiene_pdf: boolean
-  pdf_url: string | null
-}
-
-type Formulario = Omit<Proveedor, 'id' | 'tiene_pdf' | 'pdf_url'>
-type TarifaCampo = 'tarifa_mensual' | 'tarifa_trimestral' | 'tarifa_semestral' | 'tarifa_anual'
-type Usuario = {
-  id: number
-  username: string
-  first_name: string
-  last_name: string
-  is_admin: boolean
-  roles: string[]
-}
-
-const API_ROOT = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api').replace(/\/+$/, '')
-const API_URL = `${API_ROOT}/proveedores/`
-const formatoTarifa = new Intl.NumberFormat('es-CO', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
-function formatoTarifaEnEdicion(valor: string) {
-  const [entero = '', decimales] = valor.split('.')
-  const enteroAgrupado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-  return decimales === undefined ? enteroAgrupado : `${enteroAgrupado},${decimales}`
-}
-
-const formularioVacio: Formulario = {
-  proveedor: '',
-  contrato: '',
-  tarifa_mensual: '',
-  tarifa_trimestral: '',
-  tarifa_semestral: '',
-  tarifa_anual: '',
-  servicios: '',
-  estado: 'Activo',
-}
-
-async function respuestaJson<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    const body = await response.json().catch(() => null)
-    const detail =
-      body && typeof body === 'object'
-        ? Object.values(body).flat().join(' ')
-        : `Error ${response.status}`
-    throw new Error(detail || `Error ${response.status}`)
-  }
-  return response.json() as Promise<T>
-}
-
-function csrfToken() {
-  const value = document.cookie
-    .split('; ')
-    .find((cookie) => cookie.startsWith('csrftoken='))
-    ?.split('=')
-    .slice(1)
-    .join('=')
-  return value ? decodeURIComponent(value) : ''
-}
-
-type LoginPageProps = {
-  onLogin: (username: string, password: string) => Promise<void>
-  busy: boolean
-  error: string
-}
-
-function LoginPage({ onLogin, busy, error }: LoginPageProps) {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    void onLogin(username, password)
-  }
-
-  return (
-    <main className="login-screen">
-      <section className="login-card">
-          
-      
-          <span>Proveedores</span>
-        
-    
-        
-        <h1>Inicia sesión</h1>
-        <p className="subtitle">Ingresa con la cuenta que te asignó el administrador.</p>
-        {error && <div className="error-banner login-error" role="alert">{error}</div>}
-        <form className="login-form" onSubmit={submit}>
-          <label>Usuario<input autoComplete="username" autoFocus required value={username} onChange={(event) => setUsername(event.target.value)} /></label>
-          <label>Contraseña<input autoComplete="current-password" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-          <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Ingresando…' : 'Iniciar sesión'}</button>
-        </form>
-      </section>
-    </main>
-  )
-}
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import LoginPage from './components/LoginPage'
+import ProviderFormDialog from './components/ProviderFormDialog'
+import ProviderSummary from './components/ProviderSummary'
+import ProviderTable from './components/ProviderTable'
+import type { Contrato, Formulario, Proveedor, Usuario } from './types'
+import { API_ROOT, CONTRATOS_URL, PROVEEDORES_URL, csrfToken, formularioVacio, respuestaJson } from './utils'
 
 function App() {
   const [usuario, setUsuario] = useState<Usuario | null>(null)
@@ -115,31 +12,17 @@ function App() {
   const [loginBusy, setLoginBusy] = useState(false)
   const [loginError, setLoginError] = useState('')
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [contratos, setContratos] = useState<Contrato[]>([])
   const [formulario, setFormulario] = useState<Formulario>(formularioVacio)
-  const [tarifaEnfocada, setTarifaEnfocada] = useState<TarifaCampo | null>(null)
   const [archivoPdf, setArchivoPdf] = useState<File | null>(null)
-  const inputPdf = useRef<HTMLInputElement>(null)
-  const inputTarifas = useRef<Record<TarifaCampo, HTMLInputElement | null>>({
-    tarifa_mensual: null,
-    tarifa_trimestral: null,
-    tarifa_semestral: null,
-    tarifa_anual: null,
-  })
   const [editando, setEditando] = useState<number | null>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
-  const dialogoProveedor = useRef<HTMLDialogElement>(null)
   const [sidebarVisible, setSidebarVisible] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    const dialogo = dialogoProveedor.current
-    if (!dialogo) return
-    if (modalAbierto && !dialogo.open) dialogo.showModal()
-    if (!modalAbierto && dialogo.open) dialogo.close()
-  }, [modalAbierto])
+  const [formError, setFormError] = useState('')
 
   useEffect(() => {
     async function iniciarSesion() {
@@ -189,6 +72,7 @@ function App() {
       await respuestaJson<{ authenticated: boolean }>(response)
       setUsuario(null)
       setProveedores([])
+      setContratos([])
       cancelarEdicion()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar la sesión.')
@@ -200,7 +84,16 @@ function App() {
     setCargando(true)
     setError('')
     try {
-      setProveedores(await respuestaJson<Proveedor[]>(await fetch(API_URL, { credentials: 'include' })))
+      const [respuestaProveedores, respuestaContratos] = await Promise.all([
+        fetch(PROVEEDORES_URL, { credentials: 'include' }),
+        fetch(CONTRATOS_URL, { credentials: 'include' }),
+      ])
+      const [proveedoresCargados, contratosCargados] = await Promise.all([
+        respuestaJson<Proveedor[]>(respuestaProveedores),
+        respuestaJson<Contrato[]>(respuestaContratos),
+      ])
+      setProveedores(proveedoresCargados)
+      setContratos(contratosCargados)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudieron cargar los proveedores.')
     } finally {
@@ -212,64 +105,22 @@ function App() {
     if (usuario) void cargarProveedores()
   }, [cargarProveedores])
 
-  const visibles = proveedores.filter((item) =>
-    `${item.proveedor} ${item.contrato} ${item.servicios}`
+  const visibles = contratos.filter((item) =>
+    `${item.proveedor.nombre} ${item.proveedor.codigo} ${item.contrato} ${item.servicios}`
       .toLocaleLowerCase('es')
       .includes(busqueda.toLocaleLowerCase('es')),
   )
-  const activos = proveedores.filter((item) => item.estado === 'Activo').length
-  const proveedoresActivos = proveedores.filter((item) => item.estado === 'Activo')
-  const resumenTarifas = ([
-    ['Mensual', 'tarifa_mensual'],
-    ['Trimestral', 'tarifa_trimestral'],
-    ['Semestral', 'tarifa_semestral'],
-    ['Anual', 'tarifa_anual'],
-  ] as const).map(([periodo, campo]) => ({
-    periodo,
-    total: proveedoresActivos.reduce((suma, item) => suma + Number(item[campo]), 0),
-  }))
-
   function cambiarCampo(campo: keyof Formulario, valor: string) {
     setFormulario((actual) => ({ ...actual, [campo]: valor }))
   }
 
-  function cambiarTarifa(campo: TarifaCampo, valor: string) {
-    const input = inputTarifas.current[campo]
-    const posicion = input?.selectionStart ?? valor.length
-    const antesDelCursor = valor.slice(0, posicion)
-    const digitosAntes = (antesDelCursor.match(/\d/g) ?? []).length
-    const comaAntes = antesDelCursor.includes(',')
-    const limpio = valor.replace(/\./g, '').replace(/[^\d,]/g, '')
-    const partes = limpio.split(',')
-    const entero = partes[0] || (partes.length > 1 ? '0' : '')
-    const decimales = (partes.slice(1).join('') || '').slice(0, 2)
-    const tieneComa = partes.length > 1
-    const canonico = `${entero}${tieneComa ? `.${decimales}` : ''}`
-    const enteroAgrupado = entero.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
-    const visual = `${enteroAgrupado}${tieneComa ? `,${decimales}` : ''}`
-
-    cambiarCampo(campo, canonico)
-    if (input) {
-      requestAnimationFrame(() => {
-        let nuevaPosicion = 0
-        let digitosContados = 0
-        while (nuevaPosicion < visual.length && digitosContados < digitosAntes) {
-          if (/\d/.test(visual[nuevaPosicion])) digitosContados += 1
-          nuevaPosicion += 1
-        }
-        if (comaAntes && tieneComa) nuevaPosicion = Math.max(nuevaPosicion, visual.indexOf(',') + 1)
-        input.setSelectionRange(nuevaPosicion, nuevaPosicion)
-      })
-    }
-  }
-
-  function editar(item: Proveedor) {
+  function editar(item: Contrato) {
+    setFormError('')
     setEditando(item.id)
     setModalAbierto(true)
     setArchivoPdf(null)
-    if (inputPdf.current) inputPdf.current.value = ''
     setFormulario({
-      proveedor: item.proveedor,
+      proveedor_id: String(item.proveedor.id),
       contrato: item.contrato,
       tarifa_mensual: item.tarifa_mensual,
       tarifa_trimestral: item.tarifa_trimestral,
@@ -285,50 +136,62 @@ function App() {
     setEditando(null)
     setFormulario(formularioVacio)
     setArchivoPdf(null)
-    if (inputPdf.current) inputPdf.current.value = ''
+    setFormError('')
   }
 
-  async function guardar(event: FormEvent<HTMLFormElement>) {
+  async function guardar(
+    event: FormEvent<HTMLFormElement>,
+    nuevoProveedor: { codigo: string; nombre: string },
+    codigoProveedor: string,
+  ) {
     event.preventDefault()
     setGuardando(true)
-    setError('')
+    setFormError('')
     try {
       const datos = new FormData()
-      Object.entries(formulario).forEach(([campo, valor]) => datos.append(campo, valor))
+      Object.entries(formulario).forEach(([campo, valor]) => {
+        if (campo !== 'proveedor_id') datos.append(campo, valor)
+      })
+      if (formulario.proveedor_id === 'nuevo') {
+        datos.append('nuevo_proveedor', JSON.stringify(nuevoProveedor))
+      } else if (formulario.proveedor_id) {
+        datos.append('proveedor_id', formulario.proveedor_id)
+        datos.append('proveedor_codigo', codigoProveedor)
+      }
       ;(['tarifa_mensual', 'tarifa_trimestral', 'tarifa_semestral', 'tarifa_anual'] as const).forEach((campo) => {
         datos.set(campo, String(Number(formulario[campo])))
       })
       if (archivoPdf) datos.append('archivo_pdf', archivoPdf)
-      const response = await fetch(editando ? `${API_URL}${editando}/` : API_URL, {
+      const response = await fetch(editando ? `${CONTRATOS_URL}${editando}/` : CONTRATOS_URL, {
         method: editando ? 'PUT' : 'POST',
         credentials: 'include',
         headers: { 'X-CSRFToken': csrfToken() },
         body: datos,
       })
-      await respuestaJson<Proveedor>(response)
+      await respuestaJson<Contrato>(response)
       cancelarEdicion()
       await cargarProveedores()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar el proveedor.')
+      setFormError(err instanceof Error ? err.message : 'No se pudo guardar el contrato.')
     } finally {
       setGuardando(false)
     }
   }
 
-  async function eliminar(item: Proveedor) {
-    if (!window.confirm(`¿Eliminar a ${item.proveedor}? Esta acción no se puede deshacer.`)) return
+  async function eliminar(item: Contrato) {
+    if (!window.confirm(`¿Eliminar el contrato ${item.contrato} de ${item.proveedor.nombre}? Esta acción no se puede deshacer.`)) return
     setError('')
     try {
-      const response = await fetch(`${API_URL}${item.id}/`, {
+      const response = await fetch(`${CONTRATOS_URL}${item.id}/`, {
         method: 'DELETE',
         credentials: 'include',
         headers: { 'X-CSRFToken': csrfToken() },
       })
-      if (!response.ok) throw new Error(`No se pudo eliminar el proveedor (error ${response.status}).`)
-      setProveedores((actuales) => actuales.filter((proveedor) => proveedor.id !== item.id))
+      if (!response.ok) throw new Error(`No se pudo eliminar el contrato (error ${response.status}).`)
+      setContratos((actuales) => actuales.filter((contrato) => contrato.id !== item.id))
       if (editando === item.id) cancelarEdicion()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo eliminar el proveedor.')
+      setError(err instanceof Error ? err.message : 'No se pudo eliminar el contrato.')
     }
   }
 
@@ -380,40 +243,16 @@ function App() {
           <div className="page-heading">
             <div>
               <p className="eyebrow">Gerencia de Tecnología</p>
-              <h1>Proveedores</h1>
+              <h1>Proveedores y contratos</h1>
             </div>
             {usuario.is_admin && <button className="button button-secondary" type="button" onClick={() => {
               cancelarEdicion()
+              setFormError('')
               setModalAbierto(true)
-            }}>＋ Nuevo proveedor</button>}
+            }}>＋ Nuevo contrato</button>}
           </div>
 
-          <div className="summary-grid">
-            <article className="summary-card">
-              <span className="summary-icon purple">▦</span>
-              <div><p>Total proveedores</p><strong>{proveedores.length}</strong></div>
-              <span className="summary-note">registrados</span>
-            </article>
-            <article className="summary-card">
-              <span className="summary-icon green">✓</span>
-              <div><p>Contratos activos</p><strong>{activos}</strong></div>
-              <span className="summary-note">de {proveedores.length} proveedores</span>
-            </article>
-            <article className="summary-card tariff-summary">
-              <div className="tariff-summary-heading">
-                <span className="summary-icon orange">$</span>
-                <div><p>Tarifas activas</p></div>
-              </div>
-              <div className="tariff-summary-list">
-                {resumenTarifas.map(({ periodo, total }) => (
-                  <div className="tariff-summary-item" key={periodo}>
-                    <span>{periodo}</span>
-                    <strong>$ {formatoTarifa.format(total)}</strong>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </div>
+          <ProviderSummary proveedores={proveedores} contratos={contratos} />
 
           {error && (
             <div className="error-banner" role="alert">
@@ -422,94 +261,31 @@ function App() {
             </div>
           )}
 
-          {usuario.is_admin && <dialog
-            ref={dialogoProveedor}
-            className="provider-dialog"
-            aria-labelledby="provider-dialog-title"
-            onCancel={(event) => {
-              event.preventDefault()
-              cancelarEdicion()
-            }}
-            onClick={(event) => {
-              if (event.target === dialogoProveedor.current) cancelarEdicion()
-            }}
-          >
-            <section className="form-card">
-            <div className="section-heading">
-              <div>
-                <h2 id="provider-dialog-title">{editando ? 'Editar proveedor' : 'Agregar proveedor'}</h2>
-                <p>{editando ? 'Actualiza los datos del contrato.' : 'Completa los datos para registrar un nuevo proveedor.'}</p>
-              </div>
-              <button className="dialog-close" type="button" aria-label="Cerrar formulario" onClick={cancelarEdicion}>×</button>
-            </div>
-            <form onSubmit={guardar}>
-              <div className="form-grid">
-                <label>Proveedor<input required maxLength={200} value={formulario.proveedor} onChange={(event) => cambiarCampo('proveedor', event.target.value)} placeholder="Nombre del proveedor" /></label>
-                <label>Contrato<input required maxLength={120} value={formulario.contrato} onChange={(event) => cambiarCampo('contrato', event.target.value)} placeholder="N.º o nombre del contrato" /></label>
-                {([
-                  ['tarifa_mensual', 'Tarifa mensual'],
-                  ['tarifa_trimestral', 'Tarifa trimestral'],
-                  ['tarifa_semestral', 'Tarifa semestral'],
-                  ['tarifa_anual', 'Tarifa anual'],
-                ] as const).map(([campo, etiqueta]) => (
-                  <label key={campo}>{etiqueta}<div className="currency-input"><span aria-hidden="true">$</span><input ref={(input) => { inputTarifas.current[campo] = input }} required inputMode="decimal" type="text" value={tarifaEnfocada === campo || !formulario[campo] ? formatoTarifaEnEdicion(formulario[campo]) : formatoTarifa.format(Number(formulario[campo]))} onFocus={() => setTarifaEnfocada(campo)} onBlur={() => setTarifaEnfocada(null)} onChange={(event) => cambiarTarifa(campo, event.target.value)} placeholder="0,00" aria-label={`${etiqueta} en dólares`} /></div></label>
-                ))}
-                <label>Estado<select value={formulario.estado} onChange={(event) => cambiarCampo('estado', event.target.value as Estado)}><option>Activo</option><option>Pendiente</option><option>Inactivo</option></select></label>
-                <label className="services-field">Servicios<textarea required rows={2} value={formulario.servicios} onChange={(event) => cambiarCampo('servicios', event.target.value)} placeholder="Describe los servicios contratados" /></label>
-                <label className="pdf-field">Adjuntar PDF <span className="field-hint">Opcional · máximo 10 MB</span><input ref={inputPdf} accept=".pdf,application/pdf" type="file" onChange={(event) => {
-                  const file = event.target.files?.[0] ?? null
-                  if (file && (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf'))) {
-                    setError('Selecciona un archivo PDF válido.')
-                    event.target.value = ''
-                    setArchivoPdf(null)
-                    return
-                  }
-                  if (file && file.size > 10 * 1024 * 1024) {
-                    setError('El PDF no puede superar los 10 MB.')
-                    event.target.value = ''
-                    setArchivoPdf(null)
-                    return
-                  }
-                  setError('')
-                  setArchivoPdf(file)
-                }} />{archivoPdf && <span className="field-hint">{archivoPdf.name}</span>}</label>
-              </div>
-              <div className="form-actions">
-                <button className="button button-primary" type="submit" disabled={guardando}>{guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Guardar proveedor'}</button>
-                {editando !== null && <button className="button button-plain" type="button" onClick={cancelarEdicion}>Cancelar</button>}
-              </div>
-            </form>
-            </section>
-          </dialog>}
+          {usuario.is_admin && <ProviderFormDialog
+            open={modalAbierto}
+            editando={editando !== null}
+            proveedores={proveedores}
+            formulario={formulario}
+            guardando={guardando}
+            archivoPdf={archivoPdf}
+            error={formError}
+            onChange={cambiarCampo}
+            onSubmit={guardar}
+            onClose={cancelarEdicion}
+            onFileChange={setArchivoPdf}
+            onError={setFormError}
+          />}
 
-          <section className="table-card" id="lista">
-            <div className="section-heading table-heading">
-              <div><h2>Directorio de proveedores</h2><p>{usuario.is_admin ? 'Consulta y administra los proveedores registrados.' : 'Consulta los proveedores registrados.'}</p></div>
-              <label className="search-box"><span aria-hidden="true">⌕</span><input aria-label="Buscar proveedores" value={busqueda} onChange={(event) => setBusqueda(event.target.value)} placeholder="Buscar proveedor..." /></label>
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>PROVEEDOR</th><th>CONTRATO</th><th>MENSUAL</th><th>TRIMESTRAL</th><th>SEMESTRAL</th><th>ANUAL</th><th>SERVICIOS</th><th>ESTADO</th><th>PDF</th><th>ACCIONES</th></tr></thead>
-                <tbody>
-                  {cargando ? <tr><td className="empty-state" colSpan={10}>Cargando proveedores…</td></tr> : visibles.length === 0 ? <tr><td className="empty-state" colSpan={10}>{proveedores.length ? 'No hay resultados para esta búsqueda.' : 'Aún no hay proveedores. Agrega el primero en el formulario.'}</td></tr> : visibles.map((item) => (
-                    <tr key={item.id}>
-                      <td><span className="provider-name">{item.proveedor}</span></td>
-                      <td>{item.contrato}</td>
-                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_mensual))}</td>
-                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_trimestral))}</td>
-                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_semestral))}</td>
-                      <td className="rate">$ {formatoTarifa.format(Number(item.tarifa_anual))}</td>
-                      <td className="services-cell">{item.servicios}</td>
-                      <td><span className={`status status-${item.estado.toLocaleLowerCase('es')}`}>{item.estado}</span></td>
-                      <td>{item.tiene_pdf && item.pdf_url ? <span className="pdf-actions"><a href={item.pdf_url} target="_blank" rel="noopener noreferrer">Ver PDF</a></span> : <span className="no-pdf">Sin PDF</span>}</td>
-                      <td>{usuario.is_admin && <div className="row-actions"><button type="button" aria-label={`Editar ${item.proveedor}`} onClick={() => editar(item)}>Editar</button><button className="delete-action" type="button" aria-label={`Eliminar ${item.proveedor}`} onClick={() => void eliminar(item)}>Eliminar</button></div>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="table-footer">Mostrando {visibles.length} de {proveedores.length} proveedores</div>
-          </section>
+          <ProviderTable
+            contratos={contratos}
+            visibles={visibles}
+            cargando={cargando}
+            esAdministrador={usuario.is_admin}
+            busqueda={busqueda}
+            onBusquedaChange={setBusqueda}
+            onEditar={editar}
+            onEliminar={(proveedor) => void eliminar(proveedor)}
+          />
           <footer className="page-footer">Gestión de proveedores <span>•</span> Coordinación de Logistica</footer>
           <footer className="author-footer">Elaborado por la Coordinación de Logistica</footer>
         </div>

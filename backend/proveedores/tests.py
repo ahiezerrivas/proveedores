@@ -3,16 +3,22 @@ import tempfile
 
 from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase, override_settings
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import Client, TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Proveedor
+from .models import Contrato, Proveedor
 
 
 class ProveedorModelTests(TestCase):
     def test_str_includes_supplier_and_contract(self):
         proveedor = Proveedor.objects.create(
-            proveedor="Servicios del Norte",
+            codigo="PR-001",
+            nombre="Servicios del Norte",
+        )
+        contrato = Contrato.objects.create(
+            proveedor=proveedor,
             contrato="CT-2026-01",
             tarifa_mensual="250.00",
             tarifa_trimestral="700.00",
@@ -20,7 +26,81 @@ class ProveedorModelTests(TestCase):
             tarifa_anual="2400.00",
             servicios="Soporte técnico",
         )
-        self.assertEqual(str(proveedor), "Servicios del Norte — CT-2026-01")
+        self.assertEqual(str(contrato), "Servicios del Norte — CT-2026-01")
+
+
+class NormalizationMigrationTests(TransactionTestCase):
+    def test_existing_rows_are_migrated_to_suppliers_and_contracts(self):
+        targets = MigrationExecutor(connection).loader.graph.leaf_nodes()
+        old_target = [("proveedores", "0005_proveedor_campos_opcionales")]
+
+        try:
+            MigrationExecutor(connection).migrate(old_target)
+            old_apps = MigrationExecutor(connection).loader.project_state(old_target).apps
+            ProveedorAnterior = old_apps.get_model("proveedores", "Proveedor")
+            registros = [
+                ProveedorAnterior.objects.create(
+                    proveedor="Servicios del Norte",
+                    contrato="CT-2026-01",
+                    tarifa_mensual="250.00",
+                    tarifa_trimestral="700.00",
+                    tarifa_semestral="1300.00",
+                    tarifa_anual="2400.00",
+                    servicios="Soporte técnico",
+                    documento_pdf="proveedores/contratos/contrato.pdf",
+                ),
+                ProveedorAnterior.objects.create(
+                    proveedor="Servicios del Norte",
+                    contrato="CT-2026-02",
+                    tarifa_mensual="300.00",
+                    tarifa_trimestral="800.00",
+                    tarifa_semestral="1500.00",
+                    tarifa_anual="2800.00",
+                    servicios="Mantenimiento",
+                    estado="Pendiente",
+                ),
+                ProveedorAnterior.objects.create(
+                    proveedor="Servicios del Norte ",
+                    contrato="CT-2026-03",
+                    tarifa_mensual="100.00",
+                    tarifa_trimestral="250.00",
+                    tarifa_semestral="500.00",
+                    tarifa_anual="900.00",
+                    servicios="Instalación",
+                ),
+            ]
+
+            MigrationExecutor(connection).migrate(targets)
+            new_apps = MigrationExecutor(connection).loader.project_state(targets).apps
+            ProveedorNuevo = new_apps.get_model("proveedores", "Proveedor")
+            ContratoNuevo = new_apps.get_model("proveedores", "Contrato")
+            contratos = list(ContratoNuevo.objects.order_by("id"))
+
+            self.assertEqual(ProveedorNuevo.objects.count(), 2)
+            self.assertEqual(ContratoNuevo.objects.count(), 3)
+            self.assertEqual(
+                [contrato.pk for contrato in contratos],
+                [registro.pk for registro in registros],
+            )
+            self.assertEqual(contratos[0].proveedor_id, contratos[1].proveedor_id)
+            self.assertNotEqual(contratos[1].proveedor_id, contratos[2].proveedor_id)
+            self.assertEqual(str(contratos[0].tarifa_anual), "2400.00")
+            self.assertEqual(contratos[0].documento_pdf.name, "proveedores/contratos/contrato.pdf")
+            nuevo_contrato = ContratoNuevo.objects.create(
+                proveedor_id=contratos[0].proveedor_id,
+                contrato="CT-2026-04",
+            )
+            self.assertGreater(nuevo_contrato.pk, max(registro.pk for registro in registros))
+
+            MigrationExecutor(connection).migrate(old_target)
+            reverted_apps = MigrationExecutor(connection).loader.project_state(old_target).apps
+            ProveedorRevertido = reverted_apps.get_model("proveedores", "Proveedor")
+            revertidos = list(ProveedorRevertido.objects.order_by("id"))
+            self.assertEqual(len(revertidos), 4)
+            self.assertEqual(revertidos[0].proveedor, "Servicios del Norte")
+            self.assertEqual(revertidos[0].documento_pdf.name, "proveedores/contratos/contrato.pdf")
+        finally:
+            MigrationExecutor(connection).migrate(targets)
 
 
 class ProveedorPermissionTests(TestCase):
@@ -31,7 +111,9 @@ class ProveedorPermissionTests(TestCase):
         media_settings.enable()
         self.addCleanup(media_settings.disable)
         self.client = APIClient()
-        self.url = "/api/proveedores/"
+        self.url = "/api/contratos/"
+        self.proveedores_url = "/api/proveedores/"
+        self.proveedor = Proveedor.objects.create(codigo="PR-001", nombre="Servicios del Norte")
         self.consulta = User.objects.create_user(username="consulta", password="test-password")
         self.consulta.groups.add(Group.objects.get(name="Consulta"))
         self.administrador = User.objects.create_user(username="admin", password="test-password")
@@ -40,12 +122,13 @@ class ProveedorPermissionTests(TestCase):
     def test_anonymous_user_cannot_read_proveedores(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.get(self.proveedores_url).status_code, 403)
 
     def test_consulta_role_can_read_but_cannot_create(self):
         self.client.force_authenticate(self.consulta)
         self.assertEqual(self.client.get(self.url).status_code, 200)
-        proveedor = Proveedor.objects.create(
-            proveedor="Servicios del Norte",
+        contrato = Contrato.objects.create(
+            proveedor=self.proveedor,
             contrato="CT-2026-01",
             tarifa_mensual="250.00",
             tarifa_trimestral="700.00",
@@ -56,7 +139,7 @@ class ProveedorPermissionTests(TestCase):
         response = self.client.post(
             self.url,
             {
-                "proveedor": "Servicios del Norte",
+                "proveedor_id": str(self.proveedor.pk),
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
                 "tarifa_trimestral": "700.00",
@@ -68,21 +151,29 @@ class ProveedorPermissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
         self.assertEqual(
+            self.client.post(
+                self.proveedores_url,
+                {"codigo": "PR-002", "nombre": "Otro proveedor"},
+                format="json",
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
             self.client.patch(
-                f"{self.url}{proveedor.pk}/",
+                f"{self.url}{contrato.pk}/",
                 {"estado": "Inactivo"},
                 format="json",
             ).status_code,
             403,
         )
-        self.assertEqual(self.client.delete(f"{self.url}{proveedor.pk}/").status_code, 403)
+        self.assertEqual(self.client.delete(f"{self.url}{contrato.pk}/").status_code, 403)
 
     def test_administradores_role_can_create_edit_and_delete(self):
         self.client.force_authenticate(self.administrador)
         response = self.client.post(
             self.url,
             {
-                "proveedor": "Servicios del Norte",
+                "nuevo_proveedor": '{"codigo":"PR-002","nombre":"Otro proveedor"}',
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
                 "tarifa_trimestral": "700.00",
@@ -93,6 +184,19 @@ class ProveedorPermissionTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["proveedor"]["codigo"], "PR-002")
+        self.assertEqual(response.data["proveedor"]["nombre"], "Otro proveedor")
+        self.assertEqual(Proveedor.objects.count(), 2)
+        segundo_contrato = self.client.post(
+            self.url,
+            {
+                "proveedor_id": str(response.data["proveedor"]["id"]),
+                "contrato": "CT-2026-02",
+            },
+            format="multipart",
+        )
+        self.assertEqual(segundo_contrato.status_code, 201)
+        self.assertEqual(segundo_contrato.data["proveedor"]["id"], response.data["proveedor"]["id"])
         self.assertEqual(response.data["tarifa_trimestral"], "700.00")
         self.assertEqual(response.data["tarifa_semestral"], "1300.00")
         self.assertEqual(response.data["tarifa_anual"], "2400.00")
@@ -103,12 +207,96 @@ class ProveedorPermissionTests(TestCase):
         )
         self.assertEqual(self.client.delete(proveedor_url).status_code, 204)
 
+    def test_admin_can_create_proveedor_without_optional_fields(self):
+        self.client.force_authenticate(self.administrador)
+        response = self.client.post(
+            self.url,
+            {"proveedor_id": str(self.proveedor.pk)},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["contrato"], "")
+        self.assertEqual(response.data["servicios"], "")
+        for tarifa in (
+            "tarifa_mensual",
+            "tarifa_trimestral",
+            "tarifa_semestral",
+            "tarifa_anual",
+        ):
+            self.assertEqual(response.data[tarifa], "0.00")
+
+    def test_new_supplier_code_must_be_unique(self):
+        self.client.force_authenticate(self.administrador)
+        response = self.client.post(
+            self.url,
+            {
+                "nuevo_proveedor": '{"codigo":"PR-001","nombre":"Otro proveedor"}',
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Proveedor.objects.count(), 1)
+        self.assertFalse(Contrato.objects.exists())
+
+    def test_contract_modal_can_assign_code_to_existing_supplier(self):
+        self.client.force_authenticate(self.administrador)
+        response = self.client.post(
+            self.url,
+            {
+                "proveedor_id": str(self.proveedor.pk),
+                "proveedor_codigo": "PR-UPDATED",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.proveedor.refresh_from_db()
+        self.assertEqual(self.proveedor.codigo, "PR-UPDATED")
+
+    def test_existing_supplier_code_cannot_duplicate_another_supplier(self):
+        otro_proveedor = Proveedor.objects.create(codigo="PR-002", nombre="Otro proveedor")
+        self.client.force_authenticate(self.administrador)
+        response = self.client.post(
+            self.url,
+            {
+                "proveedor_id": str(self.proveedor.pk),
+                "proveedor_codigo": otro_proveedor.codigo,
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("proveedor_codigo", response.data)
+        self.assertFalse(Contrato.objects.exists())
+
+    def test_blank_tariffs_are_saved_as_zero(self):
+        self.client.force_authenticate(self.administrador)
+        response = self.client.post(
+            self.url,
+            {
+                "proveedor_id": str(self.proveedor.pk),
+                "tarifa_mensual": "",
+                "tarifa_trimestral": "",
+                "tarifa_semestral": "",
+                "tarifa_anual": "",
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["tarifa_mensual"], "0.00")
+        self.assertEqual(response.data["tarifa_trimestral"], "0.00")
+        self.assertEqual(response.data["tarifa_semestral"], "0.00")
+        self.assertEqual(response.data["tarifa_anual"], "0.00")
+
     def test_admin_can_attach_and_download_a_pdf(self):
         self.client.force_authenticate(self.administrador)
         response = self.client.post(
             self.url,
             {
-                "proveedor": "Servicios del Norte",
+                "proveedor_id": str(self.proveedor.pk),
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
                 "tarifa_trimestral": "700.00",
@@ -137,7 +325,7 @@ class ProveedorPermissionTests(TestCase):
         response = self.client.post(
             self.url,
             {
-                "proveedor": "Servicios del Norte",
+                "proveedor_id": str(self.proveedor.pk),
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
                 "tarifa_trimestral": "700.00",
@@ -154,14 +342,14 @@ class ProveedorPermissionTests(TestCase):
             format="multipart",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertFalse(Proveedor.objects.exists())
+        self.assertFalse(Contrato.objects.exists())
 
     def test_pdf_download_requires_an_authenticated_user(self):
         self.client.force_authenticate(self.administrador)
         response = self.client.post(
             self.url,
             {
-                "proveedor": "Servicios del Norte",
+                "proveedor_id": str(self.proveedor.pk),
                 "contrato": "CT-2026-01",
                 "tarifa_mensual": "250.00",
                 "tarifa_trimestral": "700.00",
