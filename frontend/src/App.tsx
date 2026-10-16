@@ -283,21 +283,22 @@ function App() {
           <ProviderSummary
             proveedores={proveedores}
             contratos={contratos}
-            onManageProviders={usuario.is_admin ? () => {
+            onManageProviders={() => {
               setErrorEliminarProveedor('')
               setModalProveedoresAbierto(true)
-            } : undefined}
+            }}
           />
 
-          {usuario.is_admin && <ProviderManagementDialog
+          <ProviderManagementDialog
             open={modalProveedoresAbierto}
             proveedores={proveedores}
             contratosPorProveedor={contratosPorProveedor}
             eliminandoId={eliminandoProveedorId}
+            puedeEliminar={usuario.is_admin}
             error={errorEliminarProveedor}
             onClose={() => setModalProveedoresAbierto(false)}
             onDelete={(proveedor) => void eliminarProveedor(proveedor)}
-          />}
+          />
 
           {error && (
             <div className="error-banner" role="alert">

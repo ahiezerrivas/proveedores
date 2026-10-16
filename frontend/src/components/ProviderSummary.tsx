@@ -4,7 +4,7 @@ import { formatoTarifa } from '../utils'
 type ProviderSummaryProps = {
   proveedores: Proveedor[]
   contratos: Contrato[]
-  onManageProviders?: () => void
+  onManageProviders: () => void
 }
 
 const camposTarifa = [
@@ -23,19 +23,11 @@ export default function ProviderSummary({ proveedores, contratos, onManageProvid
 
   return (
     <div className="summary-grid">
-      {onManageProviders ? (
-        <button className="summary-card provider-summary-trigger" type="button" onClick={onManageProviders} aria-label="Administrar proveedores">
+      <button className="summary-card provider-summary-trigger" type="button" onClick={onManageProviders} aria-label="Ver proveedores">
           <span className="summary-icon purple">▦</span>
           <div><p>Total proveedores</p><strong>{proveedores.length}</strong></div>
-          <span className="summary-note">Ver y eliminar proveedores</span>
-        </button>
-      ) : (
-        <article className="summary-card">
-          <span className="summary-icon purple">▦</span>
-          <div><p>Total proveedores</p><strong>{proveedores.length}</strong></div>
-          <span className="summary-note">registrados</span>
-        </article>
-      )}
+          <span className="summary-note">Ver proveedores</span>
+      </button>
       <article className="summary-card">
         <span className="summary-icon green">✓</span>
         <div><p>Contratos activos</p><strong>{activos.length}</strong></div>

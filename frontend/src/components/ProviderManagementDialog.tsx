@@ -6,6 +6,7 @@ type ProviderManagementDialogProps = {
   proveedores: Proveedor[]
   contratosPorProveedor: Map<number, number>
   eliminandoId: number | null
+  puedeEliminar: boolean
   error: string
   onClose: () => void
   onDelete: (proveedor: Proveedor) => void
@@ -16,6 +17,7 @@ export default function ProviderManagementDialog({
   proveedores,
   contratosPorProveedor,
   eliminandoId,
+  puedeEliminar,
   error,
   onClose,
   onDelete,
@@ -45,8 +47,8 @@ export default function ProviderManagementDialog({
       <section className="form-card provider-management">
         <div className="section-heading">
           <div>
-            <h2 id="provider-management-title">Administrar proveedores</h2>
-            <p>Solo se pueden eliminar proveedores que no tengan contratos asociados.</p>
+            <h2 id="provider-management-title">{puedeEliminar ? 'Administrar proveedores' : 'Proveedores registrados'}</h2>
+            <p>{puedeEliminar ? 'Solo se pueden eliminar proveedores que no tengan contratos asociados.' : 'Consulta los proveedores y sus contratos asociados.'}</p>
           </div>
           <button className="dialog-close" type="button" aria-label="Cerrar" onClick={onClose}>×</button>
         </div>
@@ -65,7 +67,7 @@ export default function ProviderManagementDialog({
                     {proveedor.codigo && <small>{proveedor.codigo}</small>}
                     <span>{totalContratos === 1 ? '1 contrato asociado' : `${totalContratos} contratos asociados`}</span>
                   </div>
-                  <button
+                  {puedeEliminar && <button
                     className="button button-plain provider-delete-button"
                     type="button"
                     disabled={totalContratos > 0 || eliminandoId !== null}
@@ -73,7 +75,7 @@ export default function ProviderManagementDialog({
                     onClick={() => onDelete(proveedor)}
                   >
                     {eliminando ? 'Eliminando…' : 'Eliminar'}
-                  </button>
+                  </button>}
                 </li>
               )
             })}
