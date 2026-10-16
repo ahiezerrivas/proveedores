@@ -2,6 +2,8 @@
 
 Proyecto inicial con Django REST Framework, React y PostgreSQL. Permite listar, buscar, crear, editar y eliminar proveedores.
 
+Para crear y restaurar respaldos de PostgreSQL y de los PDF adjuntos, consulta la [guía de respaldos](./README_RESPALDO_BD.md).
+
 La base de datos separa proveedores y contratos: cada proveedor tiene un código opcional (único cuando se proporciona) y nombre; cada contrato pertenece a un proveedor y contiene sus tarifas mensual, trimestral, semestral y anual, servicios, estado y PDF. La migración agrupa automáticamente los registros existentes por nombre exacto, conservando sus contratos, tarifas y documentos. Revisa luego los códigos y consolida manualmente nombres que representen al mismo proveedor pero estén escritos de forma distinta. Los campos son opcionales; las tarifas vacías se guardan como `0.00`. **Acciones** es la columna de controles (editar/eliminar) del frontend, no un campo de la base de datos.
 
 El panel muestra los montos con el símbolo `$`. El directorio y sus controles usan tipografía ampliada para facilitar la lectura. Cada proveedor puede tener un PDF adjunto opcional (hasta 10 MB); solo usuarios con sesión iniciada pueden descargarlo y el backend valida que el contenido sea PDF. Los archivos se guardan en `backend/private_uploads/`, fuera de las rutas públicas de archivos estáticos.
