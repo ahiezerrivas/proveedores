@@ -66,7 +66,7 @@ npm install
 npm run dev
 ```
 
-Abre `http://127.0.0.1:5176`. El servidor está configurado para usar IPv4 y un puerto no reservado por Windows en esta máquina. Para cambiar la dirección base de la API, define `VITE_API_URL` (por defecto `http://localhost:8000/api`).
+Abre `http://127.0.0.1:5176`. La sección de auditoría tiene su propia ruta (`http://127.0.0.1:5176/auditoria`, con React Router), así que se puede recargar o abrir directamente; si un usuario sin rol de administrador entra a esa ruta, se le redirige a la página principal. Después de actualizar el proyecto, vuelve a ejecutar `npm install` para instalar `react-router`. El servidor está configurado para usar IPv4 y un puerto no reservado por Windows en esta máquina. Para cambiar la dirección base de la API, define `VITE_API_URL` (por defecto `http://localhost:8000/api`).
 
 ### Ver el frontend desde otro dispositivo en la red local
 
