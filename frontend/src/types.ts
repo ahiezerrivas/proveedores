@@ -37,6 +37,9 @@ export type Usuario = {
 export type RegistroAuditoria = {
   id: number
   nombre_usuario: string
+  accion: string
+  accion_display: string
+  descripcion: string
   metodo: string
   ruta: string
   codigo_estado: number

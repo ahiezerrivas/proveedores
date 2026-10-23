@@ -492,3 +492,120 @@ class RegistroAuditoriaTests(TestCase):
         self.assertEqual(client.get("/api/auditoria/").status_code, 200)
 
         self.assertFalse(RegistroAuditoria.objects.exists())
+
+
+class DescripcionAuditoriaTests(TestCase):
+    def setUp(self):
+        self.media_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.media_dir.cleanup)
+        media_settings = override_settings(MEDIA_ROOT=self.media_dir.name)
+        media_settings.enable()
+        self.addCleanup(media_settings.disable)
+        self.admin = User.objects.create_user(username="admin", password="test-password")
+        self.admin.groups.add(Group.objects.get(name="Administradores"))
+        self.consulta = User.objects.create_user(username="consulta", password="test-password")
+        self.consulta.groups.add(Group.objects.get(name="Consulta"))
+        self.client = APIClient()
+        self.client.force_login(self.admin)
+
+    def ultimo_registro(self):
+        return RegistroAuditoria.objects.order_by("-id").first()
+
+    def test_creating_contract_with_new_supplier_is_described(self):
+        response = self.client.post(
+            "/api/contratos/",
+            {
+                "nuevo_proveedor": '{"codigo":"PR-002","nombre":"Otro proveedor"}',
+                "contrato": "CT-2026-01",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        registro = self.ultimo_registro()
+        self.assertEqual(registro.accion, RegistroAuditoria.Accion.CREACION)
+        self.assertEqual(
+            registro.descripcion,
+            "Creó el proveedor «Otro proveedor» (PR-002) con el contrato «CT-2026-01»",
+        )
+
+    def test_creating_contract_for_existing_supplier_is_described(self):
+        proveedor = Proveedor.objects.create(nombre="Servicios del Norte")
+
+        response = self.client.post(
+            "/api/contratos/",
+            {"proveedor_id": str(proveedor.pk), "contrato": "CT-2026-02"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            self.ultimo_registro().descripcion,
+            "Creó el contrato «CT-2026-02» del proveedor «Servicios del Norte»",
+        )
+
+    def test_updating_contract_lists_changed_fields(self):
+        proveedor = Proveedor.objects.create(nombre="Servicios del Norte")
+        contrato = Contrato.objects.create(proveedor=proveedor, contrato="CT-1", tarifa_mensual="100.00")
+
+        response = self.client.patch(
+            f"/api/contratos/{contrato.pk}/",
+            {"estado": "Inactivo", "tarifa_mensual": "120.00", "servicios": "Soporte"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        registro = self.ultimo_registro()
+        self.assertEqual(registro.accion, RegistroAuditoria.Accion.ACTUALIZACION)
+        self.assertEqual(
+            registro.descripcion,
+            "Actualizó el contrato «CT-1» del proveedor «Servicios del Norte». "
+            "Cambios: tarifa mensual: 100.00 → 120.00; estado: Activo → Inactivo; servicios",
+        )
+
+    def test_deleting_supplier_and_contract_is_described(self):
+        proveedor = Proveedor.objects.create(codigo="PR-9", nombre="Servicios del Norte")
+        contrato = Contrato.objects.create(proveedor=proveedor, contrato="CT-1")
+
+        self.assertEqual(self.client.delete(f"/api/proveedores/{proveedor.pk}/").status_code, 409)
+        self.assertEqual(
+            self.ultimo_registro().descripcion,
+            "Intentó eliminar el proveedor «Servicios del Norte» (PR-9), pero tiene contratos asociados",
+        )
+
+        self.assertEqual(self.client.delete(f"/api/contratos/{contrato.pk}/").status_code, 204)
+        self.assertEqual(
+            self.ultimo_registro().descripcion,
+            "Eliminó el contrato «CT-1» del proveedor «Servicios del Norte» (PR-9)",
+        )
+
+        self.assertEqual(self.client.delete(f"/api/proveedores/{proveedor.pk}/").status_code, 204)
+        registro = self.ultimo_registro()
+        self.assertEqual(registro.accion, RegistroAuditoria.Accion.ELIMINACION)
+        self.assertEqual(registro.descripcion, "Eliminó el proveedor «Servicios del Norte» (PR-9)")
+
+    def test_generic_descriptions_for_lists_and_rejected_requests(self):
+        self.assertEqual(self.client.get("/api/proveedores/").status_code, 200)
+        self.assertEqual(self.ultimo_registro().descripcion, "Consultó la lista de proveedores")
+
+        self.client.force_login(self.consulta)
+        self.assertEqual(self.client.post("/api/contratos/", {"contrato": "X"}).status_code, 403)
+        registro = self.ultimo_registro()
+        self.assertEqual(registro.accion, RegistroAuditoria.Accion.CREACION)
+        self.assertEqual(registro.descripcion, "Intentó crear un contrato (sin permiso)")
+
+    def test_session_actions_and_api_output_include_description(self):
+        client = Client()
+        client.post(
+            "/api/auth/login/",
+            data=json.dumps({"username": "admin", "password": "test-password"}),
+            content_type="application/json",
+        )
+        client.post("/api/auth/logout/")
+        self.assertEqual(
+            list(RegistroAuditoria.objects.order_by("id").values_list("accion", "descripcion")),
+            [("inicio_sesion", "Inició sesión"), ("cierre_sesion", "Cerró sesión")],
+        )
+
+        resultado = self.client.get("/api/auditoria/").json()["results"][0]
+        self.assertEqual(resultado["accion"], "cierre_sesion")
+        self.assertEqual(resultado["accion_display"], "Cierre de sesión")
+        self.assertEqual(resultado["descripcion"], "Cerró sesión")
