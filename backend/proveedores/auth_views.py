@@ -9,14 +9,19 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 def _user_data(user):
-    is_admin = user.is_superuser or user.groups.filter(name="Administradores").exists()
+    permisos = sorted(
+        permiso.split(".", 1)[1]
+        for permiso in user.get_all_permissions()
+        if permiso.startswith("proveedores.")
+    )
     return {
         "id": user.pk,
         "username": user.get_username(),
         "first_name": user.first_name,
         "last_name": user.last_name,
-        "is_admin": is_admin,
+        "is_superuser": user.is_superuser,
         "roles": list(user.groups.order_by("name").values_list("name", flat=True)),
+        "permisos": permisos,
     }
 
 

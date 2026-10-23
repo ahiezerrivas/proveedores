@@ -30,8 +30,9 @@ export type Usuario = {
   username: string
   first_name: string
   last_name: string
-  is_admin: boolean
+  is_superuser: boolean
   roles: string[]
+  permisos: string[]
 }
 
 export type RegistroAuditoria = {

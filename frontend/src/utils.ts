@@ -1,4 +1,4 @@
-import type { Formulario } from './types'
+import type { Formulario, Usuario } from './types'
 
 export const API_ROOT = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api').replace(/\/+$/, '')
 export const PROVEEDORES_URL = `${API_ROOT}/proveedores/`
@@ -50,4 +50,8 @@ export function csrfToken() {
     .slice(1)
     .join('=')
   return value ? decodeURIComponent(value) : ''
+}
+
+export function puede(usuario: Usuario | null, permiso: string) {
+  return usuario?.permisos.includes(permiso) ?? false
 }

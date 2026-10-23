@@ -40,7 +40,22 @@ La API registra las solicitudes realizadas por usuarios autenticados en `/api/` 
 
 ### Usuarios y roles
 
-Django crea las tablas de usuarios, grupos/roles y permisos (`auth_user`, `auth_group`, `auth_permission` y sus tablas relacionadas). La migración inicial crea los roles **Administradores** y **Consulta**. Los usuarios autenticados con el rol Consulta pueden consultar proveedores y contratos; solo un superusuario o un usuario del grupo Administradores puede crear y administrar contratos. Al crear un contrato también se puede registrar un proveedor nuevo. Esta regla se aplica en la API, no solo en la interfaz.
+Django crea las tablas de usuarios, grupos/roles y permisos (`auth_user`, `auth_group`, `auth_permission` y sus tablas relacionadas). Lo que cada usuario puede hacer depende de los **permisos de Django** que tenga (directamente o por sus grupos), no del nombre del grupo. La API revisa estos permisos y `GET /api/auth/session/` devuelve la lista en `permisos`; el frontend muestra u oculta las opciones según esa lista.
+
+| Permiso | Permite |
+| --- | --- |
+| `view_proveedor` / `view_contrato` | Ver proveedores y contratos (incluye descargar el PDF) |
+| `add_contrato` | Crear contratos |
+| `change_contrato` | Editar contratos y quitar su PDF |
+| `delete_contrato` | Eliminar contratos |
+| `add_proveedor` | Registrar un proveedor nuevo al crear un contrato |
+| `change_proveedor` | Cambiar el código de un proveedor |
+| `delete_proveedor` | Eliminar proveedores sin contratos |
+| `view_registroauditoria` | Ver la sección y la API de Auditoría |
+
+Las migraciones crean los grupos **Administradores** (todos los permisos anteriores) y **Consulta** (solo `view_proveedor` y `view_contrato`). Un superusuario tiene todos los permisos.
+
+Para crear un rol nuevo, entra al admin de Django (`/admin/`) → **Grupos** → **Agregar grupo**, elige sus permisos y asígnalo a los usuarios. Por ejemplo, un grupo **Supervisor** que administra todo menos la auditoría lleva todos los permisos de *proveedor* y *contrato*, pero no «Can view registro auditoria». Los cambios aplican la próxima vez que el usuario cargue la página; no hace falta tocar código.
 
 Crea la cuenta inicial de administración después de aplicar las migraciones:
 

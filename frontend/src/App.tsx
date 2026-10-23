@@ -7,7 +7,7 @@ import ProviderManagementDialog from './components/ProviderManagementDialog'
 import ProviderSummary from './components/ProviderSummary'
 import ProviderTable from './components/ProviderTable'
 import type { Contrato, Formulario, Proveedor, RegistroAuditoria, Usuario } from './types'
-import { API_ROOT, AUDITORIA_URL, CONTRATOS_URL, PROVEEDORES_URL, csrfToken, formularioVacio, respuestaJson } from './utils'
+import { API_ROOT, AUDITORIA_URL, CONTRATOS_URL, PROVEEDORES_URL, csrfToken, formularioVacio, puede, respuestaJson } from './utils'
 
 function App() {
   const location = useLocation()
@@ -125,7 +125,7 @@ function App() {
   }, [cargarProveedores])
 
   const cargarAuditoria = useCallback(async () => {
-    if (!usuario?.is_admin || seccion !== 'auditoria') return
+    if (!puede(usuario, 'view_registroauditoria') || seccion !== 'auditoria') return
     setCargandoAuditoria(true)
     setErrorAuditoria('')
     try {
@@ -148,7 +148,7 @@ function App() {
   }, [cargarAuditoria])
 
   useEffect(() => {
-    if (!usuario?.is_admin || seccion !== 'auditoria') return
+    if (!puede(usuario, 'view_registroauditoria') || seccion !== 'auditoria') return
     fetch(`${AUDITORIA_URL}usuarios/`, { credentials: 'include' })
       .then((response) => respuestaJson<string[]>(response))
       .then(setUsuariosAuditoria)
@@ -293,7 +293,7 @@ function App() {
         >
           <span aria-hidden="true">▦</span> Proveedores
         </button>
-        {usuario.is_admin && (
+        {puede(usuario, 'view_registroauditoria') && (
           <button
             className={`nav-item${seccion === 'auditoria' ? ' active' : ''}`}
             type="button"
@@ -308,7 +308,7 @@ function App() {
         )}
         <div className="sidebar-bottom">
           <span className="avatar">{usuario.username.slice(0, 2).toUpperCase()}</span>
-          <span><strong>{usuario.first_name || usuario.username}</strong><small>{usuario.is_admin ? 'Administrador' : 'Consulta'}</small></span>
+          <span><strong>{usuario.first_name || usuario.username}</strong><small>{usuario.roles.join(', ') || (usuario.is_superuser ? 'Superusuario' : 'Sin rol')}</small></span>
         </div>
       </aside>
 
@@ -339,7 +339,7 @@ function App() {
               <p className="eyebrow">Gerencia de Tecnología</p>
               <h1>{seccion === 'auditoria' ? 'Auditoría de actividad' : 'Proveedores y contratos'}</h1>
             </div>
-            {seccion === 'proveedores' && usuario.is_admin && <button className="button button-secondary" type="button" onClick={() => {
+            {seccion === 'proveedores' && puede(usuario, 'add_contrato') && <button className="button button-secondary" type="button" onClick={() => {
               cancelarEdicion()
               setFormError('')
               setModalAbierto(true)
@@ -347,7 +347,7 @@ function App() {
           </div>
 
           <Routes>
-            <Route path="/auditoria" element={usuario.is_admin ? (
+            <Route path="/auditoria" element={puede(usuario, 'view_registroauditoria') ? (
             <AuditLogPanel
               registros={registrosAuditoria}
               total={totalAuditoria}
@@ -385,7 +385,7 @@ function App() {
                 proveedores={proveedores}
                 contratosPorProveedor={contratosPorProveedor}
                 eliminandoId={eliminandoProveedorId}
-                puedeEliminar={usuario.is_admin}
+                puedeEliminar={puede(usuario, 'delete_proveedor')}
                 error={errorEliminarProveedor}
                 onClose={() => setModalProveedoresAbierto(false)}
                 onDelete={(proveedor) => void eliminarProveedor(proveedor)}
@@ -398,8 +398,10 @@ function App() {
                 </div>
               )}
 
-              {usuario.is_admin && <ProviderFormDialog
+              {(puede(usuario, 'add_contrato') || puede(usuario, 'change_contrato')) && <ProviderFormDialog
                 open={modalAbierto}
+                puedeCrearProveedor={puede(usuario, 'add_proveedor')}
+                puedeEditarProveedor={puede(usuario, 'change_proveedor')}
                 editando={editando !== null}
                 proveedores={proveedores}
                 formulario={formulario}
@@ -417,7 +419,8 @@ function App() {
                 contratos={contratos}
                 visibles={visibles}
                 cargando={cargando}
-                esAdministrador={usuario.is_admin}
+                puedeEditar={puede(usuario, 'change_contrato')}
+                puedeEliminar={puede(usuario, 'delete_contrato')}
                 busqueda={busqueda}
                 onBusquedaChange={setBusqueda}
                 onEditar={editar}

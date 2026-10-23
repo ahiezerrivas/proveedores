@@ -5,6 +5,8 @@ import { formatoTarifa, formatoTarifaEnEdicion } from '../utils'
 type ProviderFormDialogProps = {
   open: boolean
   editando: boolean
+  puedeCrearProveedor: boolean
+  puedeEditarProveedor: boolean
   proveedores: Proveedor[]
   formulario: Formulario
   guardando: boolean
@@ -31,6 +33,8 @@ const camposTarifa: [TarifaCampo, string][] = [
 export default function ProviderFormDialog({
   open,
   editando,
+  puedeCrearProveedor,
+  puedeEditarProveedor,
   proveedores,
   formulario,
   guardando,
@@ -151,9 +155,9 @@ export default function ProviderFormDialog({
                   {proveedor.codigo ? `${proveedor.codigo} — ` : ''}{proveedor.nombre}
                 </option>
               ))}
-              <option value="nuevo">＋ Registrar proveedor nuevo</option>
+              {puedeCrearProveedor && <option value="nuevo">＋ Registrar proveedor nuevo</option>}
             </select></label>
-            {formulario.proveedor_id !== '' && formulario.proveedor_id !== 'nuevo' && (
+            {puedeEditarProveedor && formulario.proveedor_id !== '' && formulario.proveedor_id !== 'nuevo' && (
               <label>Código del proveedor<input maxLength={60} value={codigoProveedor} onChange={(event) => setCodigoProveedor(event.target.value)} placeholder="Código único (opcional)" /></label>
             )}
             {formulario.proveedor_id === 'nuevo' && <>

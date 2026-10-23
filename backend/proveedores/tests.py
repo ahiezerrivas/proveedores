@@ -1,7 +1,7 @@
 import json
 import tempfile
 
-from django.contrib.auth.models import Group, User
+from django.contrib.auth.models import Group, Permission, User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
@@ -409,7 +409,7 @@ class AuthenticationTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["user"]["is_admin"])
+        self.assertIn("view_registroauditoria", response.json()["user"]["permisos"])
         self.assertEqual(client.get("/api/auth/session/").json()["authenticated"], True)
 
 
@@ -659,3 +659,77 @@ class FiltrosAuditoriaTests(TestCase):
         consulta.groups.add(Group.objects.get(name="Consulta"))
         self.client.force_login(consulta)
         self.assertEqual(self.client.get("/api/auditoria/usuarios/").status_code, 403)
+
+
+class PermisosPorGrupoTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.supervisor = User.objects.create_user(username="supervisor", password="test-password")
+        grupo = Group.objects.create(name="Supervisor")
+        grupo.permissions.set(
+            Permission.objects.filter(content_type__app_label="proveedores").exclude(
+                codename__in=["view_registroauditoria", "add_registroauditoria",
+                              "change_registroauditoria", "delete_registroauditoria"]
+            )
+        )
+        self.supervisor.groups.add(grupo)
+
+    def test_custom_group_can_manage_contracts_but_not_read_audit(self):
+        self.client.force_login(self.supervisor)
+        response = self.client.post(
+            "/api/contratos/",
+            {"nuevo_proveedor": '{"codigo":"PR-1","nombre":"Nuevo"}', "contrato": "CT-1"},
+        )
+        self.assertEqual(response.status_code, 201)
+        contrato_url = f"/api/contratos/{response.data['id']}/"
+        self.assertEqual(self.client.patch(contrato_url, {"estado": "Inactivo"}, format="json").status_code, 200)
+        self.assertEqual(self.client.delete(contrato_url).status_code, 204)
+        self.assertEqual(self.client.get("/api/auditoria/").status_code, 403)
+        self.assertEqual(self.client.get("/api/auditoria/usuarios/").status_code, 403)
+
+        permisos = self.client.get("/api/auth/session/").json()["user"]["permisos"]
+        self.assertIn("add_contrato", permisos)
+        self.assertNotIn("view_registroauditoria", permisos)
+
+    def test_creating_new_supplier_requires_add_proveedor(self):
+        usuario = User.objects.create_user(username="capturista", password="test-password")
+        usuario.user_permissions.set(
+            Permission.objects.filter(
+                content_type__app_label="proveedores",
+                codename__in=["view_contrato", "add_contrato", "view_proveedor"],
+            )
+        )
+        proveedor = Proveedor.objects.create(codigo="PR-1", nombre="Existente")
+        self.client.force_login(usuario)
+
+        nuevo = self.client.post(
+            "/api/contratos/",
+            {"nuevo_proveedor": '{"codigo":"PR-2","nombre":"Otro"}', "contrato": "CT-1"},
+        )
+        self.assertEqual(nuevo.status_code, 403)
+        self.assertFalse(Proveedor.objects.filter(codigo="PR-2").exists())
+
+        cambia_codigo = self.client.post(
+            "/api/contratos/",
+            {"proveedor_id": str(proveedor.pk), "proveedor_codigo": "PR-9", "contrato": "CT-2"},
+        )
+        self.assertEqual(cambia_codigo.status_code, 403)
+
+        existente = self.client.post(
+            "/api/contratos/",
+            {"proveedor_id": str(proveedor.pk), "proveedor_codigo": "PR-1", "contrato": "CT-3"},
+        )
+        self.assertEqual(existente.status_code, 201)
+
+    def test_user_without_permissions_cannot_read(self):
+        usuario = User.objects.create_user(username="sin-rol", password="test-password")
+        self.client.force_login(usuario)
+        self.assertEqual(self.client.get("/api/contratos/").status_code, 403)
+        self.assertEqual(self.client.get("/api/auth/session/").json()["user"]["permisos"], [])
+
+    def test_default_groups_keep_their_permissions(self):
+        administradores = set(Group.objects.get(name="Administradores").permissions.values_list("codename", flat=True))
+        consulta = set(Group.objects.get(name="Consulta").permissions.values_list("codename", flat=True))
+        self.assertIn("view_registroauditoria", administradores)
+        self.assertIn("delete_contrato", administradores)
+        self.assertEqual(consulta, {"view_proveedor", "view_contrato"})
