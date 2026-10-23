@@ -11,14 +11,6 @@ type AuditLogPanelProps = {
   onCambiarPagina: (pagina: number) => void
 }
 
-const acciones: Record<string, string> = {
-  GET: 'Consulta',
-  POST: 'Creación',
-  PUT: 'Actualización',
-  PATCH: 'Actualización',
-  DELETE: 'Eliminación',
-}
-
 function AuditLogPanel({
   registros,
   total,
@@ -34,7 +26,7 @@ function AuditLogPanel({
       <div className="table-heading audit-heading">
         <div>
           <h2>Actividad de usuarios</h2>
-          <p>Solicitudes realizadas en la aplicación. Se muestran primero las más recientes.</p>
+          <p>Acciones realizadas en la aplicación. Se muestran primero las más recientes.</p>
         </div>
         <span className="audit-total">{total} registros</span>
       </div>
@@ -53,7 +45,7 @@ function AuditLogPanel({
               <th>Fecha y hora</th>
               <th>Usuario</th>
               <th>Acción</th>
-              <th>Recurso</th>
+              <th>Descripción</th>
               <th>Resultado</th>
               <th>Dirección IP</th>
             </tr>
@@ -70,11 +62,17 @@ function AuditLogPanel({
                   timeStyle: 'medium',
                 }).format(new Date(registro.fecha))}</td>
                 <td>{registro.nombre_usuario}</td>
-                <td>{acciones[registro.metodo] ?? registro.metodo}</td>
-                <td><code>{registro.ruta}</code></td>
+                <td>{registro.accion_display}</td>
                 <td>
-                  <span className={`status ${registro.codigo_estado < 400 ? 'status-activo' : 'status-inactivo'}`}>
-                    {registro.codigo_estado}
+                  <span className="audit-description">{registro.descripcion}</span>
+                  <code className="audit-technical">{registro.metodo} {registro.ruta}</code>
+                </td>
+                <td>
+                  <span
+                    className={`status ${registro.codigo_estado < 400 ? 'status-activo' : 'status-inactivo'}`}
+                    title={`Código HTTP ${registro.codigo_estado}`}
+                  >
+                    {registro.codigo_estado < 400 ? 'Exitoso' : 'Rechazado'} ({registro.codigo_estado})
                   </span>
                 </td>
                 <td>{registro.direccion_ip ?? '—'}</td>

@@ -160,11 +160,16 @@ class ContratoSerializer(serializers.ModelSerializer):
 
 
 class RegistroAuditoriaSerializer(serializers.ModelSerializer):
+    accion_display = serializers.CharField(source="get_accion_display", read_only=True)
+
     class Meta:
         model = RegistroAuditoria
         fields = [
             "id",
             "nombre_usuario",
+            "accion",
+            "accion_display",
+            "descripcion",
             "metodo",
             "ruta",
             "codigo_estado",

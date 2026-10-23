@@ -1,3 +1,4 @@
+from .auditoria import accion_para, descripcion_generica
 from .models import RegistroAuditoria
 
 
@@ -26,9 +27,14 @@ class AuditoriaMiddleware:
             return response
 
         if nombre_usuario:
+            descripcion = getattr(request, "auditoria_descripcion", None) or descripcion_generica(
+                request.method, ruta, response.status_code
+            )
             RegistroAuditoria.objects.create(
                 usuario_id=usuario_id,
                 nombre_usuario=nombre_usuario,
+                accion=accion_para(request.method, ruta),
+                descripcion=descripcion[:500],
                 metodo=request.method,
                 ruta=ruta[:255],
                 codigo_estado=response.status_code,

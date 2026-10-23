@@ -76,6 +76,15 @@ class Contrato(models.Model):
 
 
 class RegistroAuditoria(models.Model):
+    class Accion(models.TextChoices):
+        INICIO_SESION = "inicio_sesion", "Inicio de sesión"
+        CIERRE_SESION = "cierre_sesion", "Cierre de sesión"
+        CONSULTA = "consulta", "Consulta"
+        CREACION = "creacion", "Creación"
+        ACTUALIZACION = "actualizacion", "Actualización"
+        ELIMINACION = "eliminacion", "Eliminación"
+        OTRO = "otro", "Otro"
+
     usuario = models.ForeignKey(
         "auth.User",
         related_name="registros_auditoria",
@@ -84,6 +93,8 @@ class RegistroAuditoria(models.Model):
         on_delete=models.SET_NULL,
     )
     nombre_usuario = models.CharField(max_length=150)
+    accion = models.CharField(max_length=20, choices=Accion.choices, default=Accion.OTRO)
+    descripcion = models.CharField(max_length=500, blank=True)
     metodo = models.CharField(max_length=10)
     ruta = models.CharField(max_length=255)
     codigo_estado = models.PositiveSmallIntegerField()
@@ -94,4 +105,4 @@ class RegistroAuditoria(models.Model):
         ordering = ["-fecha", "-id"]
 
     def __str__(self):
-        return f"{self.nombre_usuario} — {self.metodo} {self.ruta}"
+        return f"{self.nombre_usuario} — {self.descripcion or f'{self.metodo} {self.ruta}'}"

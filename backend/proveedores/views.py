@@ -6,6 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.response import Response
 
+from .auditoria import describir, nombre_contrato, nombre_proveedor
 from .models import Contrato, Proveedor, RegistroAuditoria
 from .serializers import ContratoSerializer, ProveedorSerializer, RegistroAuditoriaSerializer
 
@@ -39,20 +40,28 @@ class ProveedorViewSet(
     serializer_class = ProveedorSerializer
     permission_classes = [EsAdministradorOConsulta]
 
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        describir(request, f"Consultó el proveedor {nombre_proveedor(self.get_object())}")
+        return response
+
     def destroy(self, request, *args, **kwargs):
         proveedor = self.get_object()
+        nombre = nombre_proveedor(proveedor)
+        conflicto = Response(
+            {"detail": "No se puede eliminar este proveedor porque tiene contratos asociados."},
+            status=status.HTTP_409_CONFLICT,
+        )
         if proveedor.contratos.exists():
-            return Response(
-                {"detail": "No se puede eliminar este proveedor porque tiene contratos asociados."},
-                status=status.HTTP_409_CONFLICT,
-            )
+            describir(request, f"Intentó eliminar el proveedor {nombre}, pero tiene contratos asociados")
+            return conflicto
         try:
-            return super().destroy(request, *args, **kwargs)
+            response = super().destroy(request, *args, **kwargs)
         except ProtectedError:
-            return Response(
-                {"detail": "No se puede eliminar este proveedor porque tiene contratos asociados."},
-                status=status.HTTP_409_CONFLICT,
-            )
+            describir(request, f"Intentó eliminar el proveedor {nombre}, pero tiene contratos asociados")
+            return conflicto
+        describir(request, f"Eliminó el proveedor {nombre}")
+        return response
 
 
 class ContratoViewSet(viewsets.ModelViewSet):
@@ -60,17 +69,74 @@ class ContratoViewSet(viewsets.ModelViewSet):
     serializer_class = ContratoSerializer
     permission_classes = [EsAdministradorOConsulta]
 
+    CAMPOS_AUDITADOS = {
+        "contrato": "nombre del contrato",
+        "tarifa_mensual": "tarifa mensual",
+        "tarifa_trimestral": "tarifa trimestral",
+        "tarifa_semestral": "tarifa semestral",
+        "tarifa_anual": "tarifa anual",
+        "estado": "estado",
+    }
+
+    def _valores_auditados(self, contrato):
+        valores = {campo: str(getattr(contrato, campo)) for campo in self.CAMPOS_AUDITADOS}
+        valores["servicios"] = contrato.servicios
+        valores["documento_pdf"] = contrato.documento_pdf.name or ""
+        valores["proveedor"] = nombre_proveedor(contrato.proveedor)
+        return valores
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        describir(request, f"Consultó el contrato {nombre_contrato(self.get_object())}")
+        return response
+
+    def perform_create(self, serializer):
+        crea_proveedor = "nuevo_proveedor" in serializer.validated_data
+        contrato = serializer.save()
+        if crea_proveedor:
+            nombre = f"«{contrato.contrato}»" if contrato.contrato else f"#{contrato.pk}"
+            descripcion = (
+                f"Creó el proveedor {nombre_proveedor(contrato.proveedor)} con el contrato {nombre}"
+            )
+        else:
+            descripcion = f"Creó el contrato {nombre_contrato(contrato)}"
+        if contrato.documento_pdf:
+            descripcion += " (con PDF adjunto)"
+        describir(self.request, descripcion)
+
     def perform_update(self, serializer):
         old_name = serializer.instance.documento_pdf.name
+        antes = self._valores_auditados(serializer.instance)
+        crea_proveedor = "nuevo_proveedor" in serializer.validated_data
         contrato = serializer.save()
         if old_name and old_name != contrato.documento_pdf.name:
             contrato.documento_pdf.storage.delete(old_name)
 
+        despues = self._valores_auditados(contrato)
+        cambios = [
+            f"{etiqueta}: {antes[campo] or '—'} → {despues[campo] or '—'}"
+            for campo, etiqueta in self.CAMPOS_AUDITADOS.items()
+            if antes[campo] != despues[campo]
+        ]
+        if antes["servicios"] != despues["servicios"]:
+            cambios.append("servicios")
+        if antes["documento_pdf"] != despues["documento_pdf"]:
+            cambios.append("PDF adjunto reemplazado" if old_name else "PDF adjunto agregado")
+        if antes["proveedor"] != despues["proveedor"]:
+            nuevo = " (nuevo)" if crea_proveedor else ""
+            cambios.append(f"proveedor: {antes['proveedor']} → {despues['proveedor']}{nuevo}")
+        descripcion = f"Actualizó el contrato {nombre_contrato(contrato)}"
+        if cambios:
+            descripcion += f". Cambios: {'; '.join(cambios)}"
+        describir(self.request, descripcion)
+
     def perform_destroy(self, instance):
+        descripcion = f"Eliminó el contrato {nombre_contrato(instance)}"
         documento = instance.documento_pdf
         instance.delete()
         if documento:
             documento.storage.delete(documento.name)
+        describir(self.request, descripcion)
 
     @action(detail=True, methods=["get", "delete"], url_path="pdf")
     def pdf(self, request, pk=None):
@@ -82,10 +148,12 @@ class ContratoViewSet(viewsets.ModelViewSet):
             contrato.documento_pdf = ""
             contrato.save(update_fields=["documento_pdf"])
             documento.storage.delete(documento.name)
+            describir(request, f"Eliminó el PDF del contrato {nombre_contrato(contrato)}")
             return Response(status=status.HTTP_204_NO_CONTENT)
 
         if not contrato.documento_pdf:
             return Response({"detail": "Este proveedor no tiene un PDF adjunto."}, status=status.HTTP_404_NOT_FOUND)
+        describir(request, f"Abrió el PDF del contrato {nombre_contrato(contrato)}")
         return FileResponse(
             contrato.documento_pdf.open("rb"),
             as_attachment=False,

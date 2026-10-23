@@ -36,7 +36,7 @@ python manage.py runserver
 
 La API de proveedores queda en `http://localhost:8000/api/proveedores/` y la de contratos en `http://localhost:8000/api/contratos/`. El acceso a ambas requiere iniciar sesión. Las tarifas se almacenan como números decimales, sin fijar moneda.
 
-La API registra las solicitudes realizadas por usuarios autenticados en `/api/` (incluidos inicio y cierre de sesión), junto con usuario, fecha, método, ruta, resultado e IP. No guarda el contenido de las solicitudes. La consulta paginada está disponible en `/api/auditoria/` exclusivamente para el grupo **Administradores** y superusuarios; en el frontend aparece la sección **Auditoría** solo para ellos.
+La API registra las solicitudes realizadas por usuarios autenticados en `/api/` (incluidos inicio y cierre de sesión), junto con usuario, fecha, método, ruta, resultado e IP. Cada registro incluye además una acción (`accion`: inicio/cierre de sesión, consulta, creación, actualización o eliminación) y una descripción legible (`descripcion`), por ejemplo «Creó el proveedor «Servicios del Norte» (PR-001) con el contrato «CT-2026-01»» o «Actualizó el contrato «CT-1» del proveedor «Servicios del Norte». Cambios: estado: Activo → Inactivo». Los registros anteriores a esta función reciben una descripción genérica (por ejemplo «Consultó la lista de proveedores») al migrar. No guarda el contenido de las solicitudes. La consulta paginada está disponible en `/api/auditoria/` exclusivamente para el grupo **Administradores** y superusuarios; en el frontend aparece la sección **Auditoría** solo para ellos.
 
 ### Usuarios y roles
 
