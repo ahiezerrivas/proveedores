@@ -6,7 +6,8 @@ type ProviderTableProps = {
   contratos: Contrato[]
   visibles: Contrato[]
   cargando: boolean
-  esAdministrador: boolean
+  puedeEditar: boolean
+  puedeEliminar: boolean
   busqueda: string
   onBusquedaChange: (valor: string) => void
   onEditar: (contrato: Contrato) => void
@@ -22,7 +23,8 @@ export default function ProviderTable({
   contratos,
   visibles,
   cargando,
-  esAdministrador,
+  puedeEditar,
+  puedeEliminar,
   busqueda,
   onBusquedaChange,
   onEditar,
@@ -36,7 +38,7 @@ export default function ProviderTable({
   return (
     <section className="table-card" id="lista">
       <div className="section-heading table-heading">
-        <div><h2>Contratos de proveedores</h2><p>{esAdministrador ? 'Consulta y administra los contratos registrados.' : 'Consulta los contratos registrados.'}</p></div>
+        <div><h2>Contratos de proveedores</h2><p>{puedeEditar || puedeEliminar ? 'Consulta y administra los contratos registrados.' : 'Consulta los contratos registrados.'}</p></div>
         <div className="table-filters">
           <label className="status-filter">Estado
             <select aria-label="Filtrar por estado" value={estadoSeleccionado} onChange={(event) => setEstadoSeleccionado(event.target.value)}>
@@ -64,7 +66,7 @@ export default function ProviderTable({
                 <td className="services-cell">{item.servicios}</td>
                 <td><span className={`status status-${item.estado.toLocaleLowerCase('es')}`}>{item.estado}</span></td>
                 <td>{item.tiene_pdf && item.pdf_url ? <span className="pdf-actions"><a href={item.pdf_url} target="_blank" rel="noopener noreferrer">Ver PDF</a></span> : <span className="no-pdf">Sin PDF</span>}</td>
-                <td>{esAdministrador && <div className="row-actions"><button type="button" aria-label={`Editar contrato ${item.contrato} de ${item.proveedor.nombre}`} onClick={() => onEditar(item)}>Editar</button><button className="delete-action" type="button" aria-label={`Eliminar contrato ${item.contrato} de ${item.proveedor.nombre}`} onClick={() => onEliminar(item)}>Eliminar</button></div>}</td>
+                <td>{(puedeEditar || puedeEliminar) && <div className="row-actions">{puedeEditar && <button type="button" aria-label={`Editar contrato ${item.contrato} de ${item.proveedor.nombre}`} onClick={() => onEditar(item)}>Editar</button>}{puedeEliminar && <button className="delete-action" type="button" aria-label={`Eliminar contrato ${item.contrato} de ${item.proveedor.nombre}`} onClick={() => onEliminar(item)}>Eliminar</button>}</div>}</td>
               </tr>
             ))}
           </tbody>

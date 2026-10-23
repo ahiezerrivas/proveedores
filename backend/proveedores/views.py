@@ -3,7 +3,8 @@ from django.db.models.deletion import ProtectedError
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import SAFE_METHODS, BasePermission
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.permissions import DjangoModelPermissions
 from rest_framework.response import Response
 
 from .auditoria import describir, nombre_contrato, nombre_proveedor
@@ -11,23 +12,25 @@ from .models import Contrato, Proveedor, RegistroAuditoria
 from .serializers import ContratoSerializer, ProveedorSerializer, RegistroAuditoriaSerializer
 
 
-class EsAdministradorOConsulta(BasePermission):
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        if request.method in SAFE_METHODS:
-            return True
-        return request.user.is_superuser or request.user.groups.filter(
-            name="Administradores"
-        ).exists()
+class PermisosDelModelo(DjangoModelPermissions):
+    """Usa los permisos de Django (ver/agregar/cambiar/eliminar) asignados a usuarios y grupos."""
+
+    perms_map = {
+        "GET": ["%(app_label)s.view_%(model_name)s"],
+        "HEAD": ["%(app_label)s.view_%(model_name)s"],
+        "OPTIONS": [],
+        "POST": ["%(app_label)s.add_%(model_name)s"],
+        "PUT": ["%(app_label)s.change_%(model_name)s"],
+        "PATCH": ["%(app_label)s.change_%(model_name)s"],
+        "DELETE": ["%(app_label)s.delete_%(model_name)s"],
+    }
 
 
-class EsAdministrador(BasePermission):
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and (
-            request.user.is_superuser
-            or request.user.groups.filter(name="Administradores").exists()
-        )
+class PermisosPdfContrato(PermisosDelModelo):
+    perms_map = {
+        **PermisosDelModelo.perms_map,
+        "DELETE": ["%(app_label)s.change_%(model_name)s"],
+    }
 
 
 class ProveedorViewSet(
@@ -38,7 +41,7 @@ class ProveedorViewSet(
 ):
     queryset = Proveedor.objects.all()
     serializer_class = ProveedorSerializer
-    permission_classes = [EsAdministradorOConsulta]
+    permission_classes = [PermisosDelModelo]
 
     def retrieve(self, request, *args, **kwargs):
         response = super().retrieve(request, *args, **kwargs)
@@ -67,7 +70,7 @@ class ProveedorViewSet(
 class ContratoViewSet(viewsets.ModelViewSet):
     queryset = Contrato.objects.select_related("proveedor").all()
     serializer_class = ContratoSerializer
-    permission_classes = [EsAdministradorOConsulta]
+    permission_classes = [PermisosDelModelo]
 
     CAMPOS_AUDITADOS = {
         "contrato": "nombre del contrato",
@@ -90,7 +93,22 @@ class ContratoViewSet(viewsets.ModelViewSet):
         describir(request, f"Consultó el contrato {nombre_contrato(self.get_object())}")
         return response
 
+    def _validar_permisos_proveedor(self, serializer):
+        datos = serializer.validated_data
+        usuario = self.request.user
+        if "nuevo_proveedor" in datos and not usuario.has_perm("proveedores.add_proveedor"):
+            raise PermissionDenied("No tienes permiso para registrar proveedores nuevos.")
+        if "proveedor_codigo" in datos:
+            proveedor = datos.get("proveedor") or getattr(serializer.instance, "proveedor", None)
+            if (
+                proveedor is not None
+                and datos["proveedor_codigo"] != proveedor.codigo
+                and not usuario.has_perm("proveedores.change_proveedor")
+            ):
+                raise PermissionDenied("No tienes permiso para cambiar el código del proveedor.")
+
     def perform_create(self, serializer):
+        self._validar_permisos_proveedor(serializer)
         crea_proveedor = "nuevo_proveedor" in serializer.validated_data
         contrato = serializer.save()
         if crea_proveedor:
@@ -105,6 +123,7 @@ class ContratoViewSet(viewsets.ModelViewSet):
         describir(self.request, descripcion)
 
     def perform_update(self, serializer):
+        self._validar_permisos_proveedor(serializer)
         old_name = serializer.instance.documento_pdf.name
         antes = self._valores_auditados(serializer.instance)
         crea_proveedor = "nuevo_proveedor" in serializer.validated_data
@@ -138,7 +157,12 @@ class ContratoViewSet(viewsets.ModelViewSet):
             documento.storage.delete(documento.name)
         describir(self.request, descripcion)
 
-    @action(detail=True, methods=["get", "delete"], url_path="pdf")
+    @action(
+        detail=True,
+        methods=["get", "delete"],
+        url_path="pdf",
+        permission_classes=[PermisosPdfContrato],
+    )
     def pdf(self, request, pk=None):
         contrato = self.get_object()
         if request.method == "DELETE":
@@ -169,7 +193,7 @@ class AuditoriaPaginacion(PageNumberPagination):
 class RegistroAuditoriaViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     queryset = RegistroAuditoria.objects.all()
     serializer_class = RegistroAuditoriaSerializer
-    permission_classes = [EsAdministrador]
+    permission_classes = [PermisosDelModelo]
     pagination_class = AuditoriaPaginacion
 
     def get_queryset(self):
