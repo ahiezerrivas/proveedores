@@ -121,8 +121,8 @@ function App() {
   }, [usuario])
 
   useEffect(() => {
-    if (usuario) void cargarProveedores()
-  }, [cargarProveedores])
+    if (seccion === 'proveedores') void cargarProveedores()
+  }, [cargarProveedores, seccion])
 
   const cargarAuditoria = useCallback(async () => {
     if (!puede(usuario, 'view_registroauditoria') || seccion !== 'auditoria') return
