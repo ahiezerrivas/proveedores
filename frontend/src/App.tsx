@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router'
 import AuditLogPanel from './components/AuditLogPanel'
 import LoginPage from './components/LoginPage'
 import ProviderFormDialog from './components/ProviderFormDialog'
@@ -9,7 +10,9 @@ import type { Contrato, Formulario, Proveedor, RegistroAuditoria, Usuario } from
 import { API_ROOT, AUDITORIA_URL, CONTRATOS_URL, PROVEEDORES_URL, csrfToken, formularioVacio, respuestaJson } from './utils'
 
 function App() {
-  const [seccion, setSeccion] = useState<'proveedores' | 'auditoria'>('proveedores')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const seccion = location.pathname.replace(/\/+$/, '') === '/auditoria' ? 'auditoria' : 'proveedores'
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [sesionCargando, setSesionCargando] = useState(true)
   const [loginBusy, setLoginBusy] = useState(false)
@@ -85,7 +88,7 @@ function App() {
       })
       await respuestaJson<{ authenticated: boolean }>(response)
       setUsuario(null)
-      setSeccion('proveedores')
+      navigate('/')
       setProveedores([])
       setContratos([])
       setRegistrosAuditoria([])
@@ -286,7 +289,7 @@ function App() {
           className={`nav-item${seccion === 'proveedores' ? ' active' : ''}`}
           type="button"
           aria-current={seccion === 'proveedores' ? 'page' : undefined}
-          onClick={() => setSeccion('proveedores')}
+          onClick={() => navigate('/')}
         >
           <span aria-hidden="true">▦</span> Proveedores
         </button>
@@ -297,7 +300,7 @@ function App() {
             aria-current={seccion === 'auditoria' ? 'page' : undefined}
             onClick={() => {
               setPaginaAuditoria(1)
-              setSeccion('auditoria')
+              navigate('/auditoria')
             }}
           >
             <span aria-hidden="true">◷</span> Auditoría
@@ -343,7 +346,8 @@ function App() {
             }}>＋ Nuevo contrato</button>}
           </div>
 
-          {seccion === 'auditoria' ? (
+          <Routes>
+            <Route path="/auditoria" element={usuario.is_admin ? (
             <AuditLogPanel
               registros={registrosAuditoria}
               total={totalAuditoria}
@@ -365,8 +369,8 @@ function App() {
                 setPaginaAuditoria(1)
               }}
             />
-          ) : (
-            <>
+            ) : <Navigate to="/" replace />} />
+            <Route path="/" element={<>
               <ProviderSummary
                 proveedores={proveedores}
                 contratos={contratos}
@@ -419,8 +423,9 @@ function App() {
                 onEditar={editar}
                 onEliminar={(proveedor) => void eliminar(proveedor)}
               />
-            </>
-          )}
+            </>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
           <footer className="page-footer">Gestión de proveedores <span>•</span> Coordinación de Logistica</footer>
           <footer className="author-footer">Elaborado por la Coordinación de Logistica</footer>
         </div>
