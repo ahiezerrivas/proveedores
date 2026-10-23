@@ -609,3 +609,53 @@ class DescripcionAuditoriaTests(TestCase):
         self.assertEqual(resultado["accion"], "cierre_sesion")
         self.assertEqual(resultado["accion_display"], "Cierre de sesión")
         self.assertEqual(resultado["descripcion"], "Cerró sesión")
+
+
+class FiltrosAuditoriaTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(username="admin", password="test-password")
+        self.admin.groups.add(Group.objects.get(name="Administradores"))
+        for nombre, accion in [
+            ("ana", "creacion"),
+            ("ana", "consulta"),
+            ("luis", "creacion"),
+            ("luis", "eliminacion"),
+        ]:
+            RegistroAuditoria.objects.create(
+                nombre_usuario=nombre,
+                accion=accion,
+                metodo="GET",
+                ruta="/api/contratos/",
+                codigo_estado=200,
+            )
+        self.client = Client()
+        self.client.force_login(self.admin)
+
+    def nombres_y_acciones(self, query):
+        response = self.client.get(f"/api/auditoria/{query}")
+        self.assertEqual(response.status_code, 200)
+        return sorted((r["nombre_usuario"], r["accion"]) for r in response.json()["results"])
+
+    def test_filters_by_user_and_action(self):
+        self.assertEqual(
+            self.nombres_y_acciones("?usuario=ana"),
+            [("ana", "consulta"), ("ana", "creacion")],
+        )
+        self.assertEqual(
+            self.nombres_y_acciones("?accion=creacion"),
+            [("ana", "creacion"), ("luis", "creacion")],
+        )
+        self.assertEqual(self.nombres_y_acciones("?usuario=luis&accion=creacion"), [("luis", "creacion")])
+        self.assertEqual(len(self.nombres_y_acciones("")), 4)
+
+    def test_lists_distinct_users_for_the_filter(self):
+        response = self.client.get("/api/auditoria/usuarios/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), ["ana", "luis"])
+        self.assertEqual(RegistroAuditoria.objects.count(), 4)
+
+    def test_users_list_is_only_for_administrators(self):
+        consulta = User.objects.create_user(username="consulta", password="test-password")
+        consulta.groups.add(Group.objects.get(name="Consulta"))
+        self.client.force_login(consulta)
+        self.assertEqual(self.client.get("/api/auditoria/usuarios/").status_code, 403)

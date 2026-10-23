@@ -9,7 +9,22 @@ type AuditLogPanelProps = {
   error: string
   onRetry: () => void
   onCambiarPagina: (pagina: number) => void
+  usuarios: string[]
+  filtroUsuario: string
+  filtroAccion: string
+  onCambiarFiltroUsuario: (valor: string) => void
+  onCambiarFiltroAccion: (valor: string) => void
 }
+
+const acciones: [string, string][] = [
+  ['inicio_sesion', 'Inicio de sesión'],
+  ['cierre_sesion', 'Cierre de sesión'],
+  ['consulta', 'Consulta'],
+  ['creacion', 'Creación'],
+  ['actualizacion', 'Actualización'],
+  ['eliminacion', 'Eliminación'],
+  ['otro', 'Otro'],
+]
 
 function AuditLogPanel({
   registros,
@@ -20,6 +35,11 @@ function AuditLogPanel({
   error,
   onRetry,
   onCambiarPagina,
+  usuarios,
+  filtroUsuario,
+  filtroAccion,
+  onCambiarFiltroUsuario,
+  onCambiarFiltroAccion,
 }: AuditLogPanelProps) {
   return (
     <section className="table-card audit-card" aria-label="Registro de auditoría">
@@ -28,7 +48,21 @@ function AuditLogPanel({
           <h2>Actividad de usuarios</h2>
           <p>Acciones realizadas en la aplicación. Se muestran primero las más recientes.</p>
         </div>
-        <span className="audit-total">{total} registros</span>
+        <div className="table-filters">
+          <label className="status-filter">Usuario
+            <select aria-label="Filtrar por usuario" value={filtroUsuario} onChange={(event) => onCambiarFiltroUsuario(event.target.value)}>
+              <option value="">Todos</option>
+              {usuarios.map((nombre) => <option key={nombre} value={nombre}>{nombre}</option>)}
+            </select>
+          </label>
+          <label className="status-filter">Acción
+            <select aria-label="Filtrar por acción" value={filtroAccion} onChange={(event) => onCambiarFiltroAccion(event.target.value)}>
+              <option value="">Todas</option>
+              {acciones.map(([valor, etiqueta]) => <option key={valor} value={valor}>{etiqueta}</option>)}
+            </select>
+          </label>
+          <span className="audit-total">{total} registros</span>
+        </div>
       </div>
 
       {error && (
@@ -54,7 +88,7 @@ function AuditLogPanel({
             {cargando ? (
               <tr><td className="empty-state" colSpan={6}>Cargando auditoría…</td></tr>
             ) : registros.length === 0 ? (
-              <tr><td className="empty-state" colSpan={6}>No hay actividad registrada.</td></tr>
+              <tr><td className="empty-state" colSpan={6}>{filtroUsuario || filtroAccion ? 'No hay actividad que coincida con los filtros.' : 'No hay actividad registrada.'}</td></tr>
             ) : registros.map((registro) => (
               <tr key={registro.id}>
                 <td>{new Intl.DateTimeFormat('es-CO', {

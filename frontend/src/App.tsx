@@ -34,6 +34,9 @@ function App() {
   const [paginaAuditoria, setPaginaAuditoria] = useState(1)
   const [cargandoAuditoria, setCargandoAuditoria] = useState(false)
   const [errorAuditoria, setErrorAuditoria] = useState('')
+  const [filtroUsuarioAuditoria, setFiltroUsuarioAuditoria] = useState('')
+  const [filtroAccionAuditoria, setFiltroAccionAuditoria] = useState('')
+  const [usuariosAuditoria, setUsuariosAuditoria] = useState<string[]>([])
 
   useEffect(() => {
     async function iniciarSesion() {
@@ -123,7 +126,10 @@ function App() {
     setCargandoAuditoria(true)
     setErrorAuditoria('')
     try {
-      const response = await fetch(`${AUDITORIA_URL}?page=${paginaAuditoria}`, { credentials: 'include' })
+      const params = new URLSearchParams({ page: String(paginaAuditoria) })
+      if (filtroUsuarioAuditoria) params.set('usuario', filtroUsuarioAuditoria)
+      if (filtroAccionAuditoria) params.set('accion', filtroAccionAuditoria)
+      const response = await fetch(`${AUDITORIA_URL}?${params}`, { credentials: 'include' })
       const data = await respuestaJson<{ count: number; results: RegistroAuditoria[] }>(response)
       setRegistrosAuditoria(data.results)
       setTotalAuditoria(data.count)
@@ -132,11 +138,19 @@ function App() {
     } finally {
       setCargandoAuditoria(false)
     }
-  }, [paginaAuditoria, seccion, usuario])
+  }, [filtroAccionAuditoria, filtroUsuarioAuditoria, paginaAuditoria, seccion, usuario])
 
   useEffect(() => {
     void cargarAuditoria()
   }, [cargarAuditoria])
+
+  useEffect(() => {
+    if (!usuario?.is_admin || seccion !== 'auditoria') return
+    fetch(`${AUDITORIA_URL}usuarios/`, { credentials: 'include' })
+      .then((response) => respuestaJson<string[]>(response))
+      .then(setUsuariosAuditoria)
+      .catch(() => setUsuariosAuditoria([]))
+  }, [seccion, usuario])
 
   const visibles = contratos.filter((item) =>
     `${item.proveedor.nombre} ${item.proveedor.codigo} ${item.contrato} ${item.servicios}`
@@ -339,6 +353,17 @@ function App() {
               error={errorAuditoria}
               onRetry={() => void cargarAuditoria()}
               onCambiarPagina={setPaginaAuditoria}
+              usuarios={usuariosAuditoria}
+              filtroUsuario={filtroUsuarioAuditoria}
+              filtroAccion={filtroAccionAuditoria}
+              onCambiarFiltroUsuario={(valor) => {
+                setFiltroUsuarioAuditoria(valor)
+                setPaginaAuditoria(1)
+              }}
+              onCambiarFiltroAccion={(valor) => {
+                setFiltroAccionAuditoria(valor)
+                setPaginaAuditoria(1)
+              }}
             />
           ) : (
             <>

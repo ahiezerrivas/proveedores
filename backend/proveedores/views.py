@@ -171,3 +171,22 @@ class RegistroAuditoriaViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = RegistroAuditoriaSerializer
     permission_classes = [EsAdministrador]
     pagination_class = AuditoriaPaginacion
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        usuario = self.request.query_params.get("usuario")
+        accion = self.request.query_params.get("accion")
+        if usuario:
+            queryset = queryset.filter(nombre_usuario=usuario)
+        if accion:
+            queryset = queryset.filter(accion=accion)
+        return queryset
+
+    @action(detail=False, methods=["get"], pagination_class=None)
+    def usuarios(self, request):
+        nombres = (
+            RegistroAuditoria.objects.order_by("nombre_usuario")
+            .values_list("nombre_usuario", flat=True)
+            .distinct()
+        )
+        return Response(list(nombres))
