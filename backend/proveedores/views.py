@@ -2,12 +2,12 @@ from django.http import FileResponse
 from django.db.models.deletion import ProtectedError
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 from rest_framework.response import Response
-from rest_framework import status
 
-from .models import Contrato, Proveedor
-from .serializers import ContratoSerializer, ProveedorSerializer
+from .models import Contrato, Proveedor, RegistroAuditoria
+from .serializers import ContratoSerializer, ProveedorSerializer, RegistroAuditoriaSerializer
 
 
 class EsAdministradorOConsulta(BasePermission):
@@ -19,6 +19,14 @@ class EsAdministradorOConsulta(BasePermission):
         return request.user.is_superuser or request.user.groups.filter(
             name="Administradores"
         ).exists()
+
+
+class EsAdministrador(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (
+            request.user.is_superuser
+            or request.user.groups.filter(name="Administradores").exists()
+        )
 
 
 class ProveedorViewSet(
@@ -84,3 +92,14 @@ class ContratoViewSet(viewsets.ModelViewSet):
             filename=f"contrato-{contrato.pk}.pdf",
             content_type="application/pdf",
         )
+
+
+class AuditoriaPaginacion(PageNumberPagination):
+    page_size = 50
+
+
+class RegistroAuditoriaViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    queryset = RegistroAuditoria.objects.all()
+    serializer_class = RegistroAuditoriaSerializer
+    permission_classes = [EsAdministrador]
+    pagination_class = AuditoriaPaginacion

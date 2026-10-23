@@ -73,3 +73,25 @@ class Contrato(models.Model):
 
     def __str__(self):
         return f"{self.proveedor.nombre} — {self.contrato}"
+
+
+class RegistroAuditoria(models.Model):
+    usuario = models.ForeignKey(
+        "auth.User",
+        related_name="registros_auditoria",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    nombre_usuario = models.CharField(max_length=150)
+    metodo = models.CharField(max_length=10)
+    ruta = models.CharField(max_length=255)
+    codigo_estado = models.PositiveSmallIntegerField()
+    direccion_ip = models.GenericIPAddressField(null=True, blank=True)
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+
+    def __str__(self):
+        return f"{self.nombre_usuario} — {self.metodo} {self.ruta}"

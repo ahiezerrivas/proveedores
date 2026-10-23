@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import AuditLogPanel from './components/AuditLogPanel'
 import LoginPage from './components/LoginPage'
 import ProviderFormDialog from './components/ProviderFormDialog'
 import ProviderManagementDialog from './components/ProviderManagementDialog'
 import ProviderSummary from './components/ProviderSummary'
 import ProviderTable from './components/ProviderTable'
-import type { Contrato, Formulario, Proveedor, Usuario } from './types'
-import { API_ROOT, CONTRATOS_URL, PROVEEDORES_URL, csrfToken, formularioVacio, respuestaJson } from './utils'
+import type { Contrato, Formulario, Proveedor, RegistroAuditoria, Usuario } from './types'
+import { API_ROOT, AUDITORIA_URL, CONTRATOS_URL, PROVEEDORES_URL, csrfToken, formularioVacio, respuestaJson } from './utils'
 
 function App() {
+  const [seccion, setSeccion] = useState<'proveedores' | 'auditoria'>('proveedores')
   const [usuario, setUsuario] = useState<Usuario | null>(null)
   const [sesionCargando, setSesionCargando] = useState(true)
   const [loginBusy, setLoginBusy] = useState(false)
@@ -27,6 +29,11 @@ function App() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [formError, setFormError] = useState('')
+  const [registrosAuditoria, setRegistrosAuditoria] = useState<RegistroAuditoria[]>([])
+  const [totalAuditoria, setTotalAuditoria] = useState(0)
+  const [paginaAuditoria, setPaginaAuditoria] = useState(1)
+  const [cargandoAuditoria, setCargandoAuditoria] = useState(false)
+  const [errorAuditoria, setErrorAuditoria] = useState('')
 
   useEffect(() => {
     async function iniciarSesion() {
@@ -75,8 +82,10 @@ function App() {
       })
       await respuestaJson<{ authenticated: boolean }>(response)
       setUsuario(null)
+      setSeccion('proveedores')
       setProveedores([])
       setContratos([])
+      setRegistrosAuditoria([])
       cancelarEdicion()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cerrar la sesión.')
@@ -108,6 +117,26 @@ function App() {
   useEffect(() => {
     if (usuario) void cargarProveedores()
   }, [cargarProveedores])
+
+  const cargarAuditoria = useCallback(async () => {
+    if (!usuario?.is_admin || seccion !== 'auditoria') return
+    setCargandoAuditoria(true)
+    setErrorAuditoria('')
+    try {
+      const response = await fetch(`${AUDITORIA_URL}?page=${paginaAuditoria}`, { credentials: 'include' })
+      const data = await respuestaJson<{ count: number; results: RegistroAuditoria[] }>(response)
+      setRegistrosAuditoria(data.results)
+      setTotalAuditoria(data.count)
+    } catch (err) {
+      setErrorAuditoria(err instanceof Error ? err.message : 'No se pudo cargar la auditoría.')
+    } finally {
+      setCargandoAuditoria(false)
+    }
+  }, [paginaAuditoria, seccion, usuario])
+
+  useEffect(() => {
+    void cargarAuditoria()
+  }, [cargarAuditoria])
 
   const visibles = contratos.filter((item) =>
     `${item.proveedor.nombre} ${item.proveedor.codigo} ${item.contrato} ${item.servicios}`
@@ -239,7 +268,27 @@ function App() {
           <span>provee<span className="brand-light">dores</span></span>
         </a>
         <p className="nav-label">GESTIÓN</p>
-        <a className="nav-item active" href="#lista"><span aria-hidden="true">▦</span> Proveedores</a>
+        <button
+          className={`nav-item${seccion === 'proveedores' ? ' active' : ''}`}
+          type="button"
+          aria-current={seccion === 'proveedores' ? 'page' : undefined}
+          onClick={() => setSeccion('proveedores')}
+        >
+          <span aria-hidden="true">▦</span> Proveedores
+        </button>
+        {usuario.is_admin && (
+          <button
+            className={`nav-item${seccion === 'auditoria' ? ' active' : ''}`}
+            type="button"
+            aria-current={seccion === 'auditoria' ? 'page' : undefined}
+            onClick={() => {
+              setPaginaAuditoria(1)
+              setSeccion('auditoria')
+            }}
+          >
+            <span aria-hidden="true">◷</span> Auditoría
+          </button>
+        )}
         <div className="sidebar-bottom">
           <span className="avatar">{usuario.username.slice(0, 2).toUpperCase()}</span>
           <span><strong>{usuario.first_name || usuario.username}</strong><small>{usuario.is_admin ? 'Administrador' : 'Consulta'}</small></span>
@@ -258,7 +307,7 @@ function App() {
             >
               <span aria-hidden="true">{sidebarVisible ? '×' : '☰'}</span>
             </button>
-            <span>Panel de gestión <span className="crumb">/ Proveedores</span></span>
+            <span>Panel de gestión <span className="crumb">/ {seccion === 'auditoria' ? 'Auditoría' : 'Proveedores'}</span></span>
           </div>
           <div className="user-menu">
             <span className="today">{new Intl.DateTimeFormat('es', { dateStyle: 'long' }).format(new Date())}</span>
@@ -271,67 +320,82 @@ function App() {
           <div className="page-heading">
             <div>
               <p className="eyebrow">Gerencia de Tecnología</p>
-              <h1>Proveedores y contratos</h1>
+              <h1>{seccion === 'auditoria' ? 'Auditoría de actividad' : 'Proveedores y contratos'}</h1>
             </div>
-            {usuario.is_admin && <button className="button button-secondary" type="button" onClick={() => {
+            {seccion === 'proveedores' && usuario.is_admin && <button className="button button-secondary" type="button" onClick={() => {
               cancelarEdicion()
               setFormError('')
               setModalAbierto(true)
             }}>＋ Nuevo contrato</button>}
           </div>
 
-          <ProviderSummary
-            proveedores={proveedores}
-            contratos={contratos}
-            onManageProviders={() => {
-              setErrorEliminarProveedor('')
-              setModalProveedoresAbierto(true)
-            }}
-          />
+          {seccion === 'auditoria' ? (
+            <AuditLogPanel
+              registros={registrosAuditoria}
+              total={totalAuditoria}
+              pagina={paginaAuditoria}
+              paginas={Math.max(1, Math.ceil(totalAuditoria / 50))}
+              cargando={cargandoAuditoria}
+              error={errorAuditoria}
+              onRetry={() => void cargarAuditoria()}
+              onCambiarPagina={setPaginaAuditoria}
+            />
+          ) : (
+            <>
+              <ProviderSummary
+                proveedores={proveedores}
+                contratos={contratos}
+                onManageProviders={() => {
+                  setErrorEliminarProveedor('')
+                  setModalProveedoresAbierto(true)
+                }}
+              />
 
-          <ProviderManagementDialog
-            open={modalProveedoresAbierto}
-            proveedores={proveedores}
-            contratosPorProveedor={contratosPorProveedor}
-            eliminandoId={eliminandoProveedorId}
-            puedeEliminar={usuario.is_admin}
-            error={errorEliminarProveedor}
-            onClose={() => setModalProveedoresAbierto(false)}
-            onDelete={(proveedor) => void eliminarProveedor(proveedor)}
-          />
+              <ProviderManagementDialog
+                open={modalProveedoresAbierto}
+                proveedores={proveedores}
+                contratosPorProveedor={contratosPorProveedor}
+                eliminandoId={eliminandoProveedorId}
+                puedeEliminar={usuario.is_admin}
+                error={errorEliminarProveedor}
+                onClose={() => setModalProveedoresAbierto(false)}
+                onDelete={(proveedor) => void eliminarProveedor(proveedor)}
+              />
 
-          {error && (
-            <div className="error-banner" role="alert">
-              <span>{error}</span>
-              <button className="text-button" type="button" onClick={() => void cargarProveedores()}>Reintentar</button>
-            </div>
+              {error && (
+                <div className="error-banner" role="alert">
+                  <span>{error}</span>
+                  <button className="text-button" type="button" onClick={() => void cargarProveedores()}>Reintentar</button>
+                </div>
+              )}
+
+              {usuario.is_admin && <ProviderFormDialog
+                open={modalAbierto}
+                editando={editando !== null}
+                proveedores={proveedores}
+                formulario={formulario}
+                guardando={guardando}
+                archivoPdf={archivoPdf}
+                error={formError}
+                onChange={cambiarCampo}
+                onSubmit={guardar}
+                onClose={cancelarEdicion}
+                onFileChange={setArchivoPdf}
+                onError={setFormError}
+              />}
+
+              <ProviderTable
+                contratos={contratos}
+                visibles={visibles}
+                cargando={cargando}
+                esAdministrador={usuario.is_admin}
+                busqueda={busqueda}
+                onBusquedaChange={setBusqueda}
+                onEditar={editar}
+                onEliminar={(proveedor) => void eliminar(proveedor)}
+              />
+            </>
           )}
-
-          {usuario.is_admin && <ProviderFormDialog
-            open={modalAbierto}
-            editando={editando !== null}
-            proveedores={proveedores}
-            formulario={formulario}
-            guardando={guardando}
-            archivoPdf={archivoPdf}
-            error={formError}
-            onChange={cambiarCampo}
-            onSubmit={guardar}
-            onClose={cancelarEdicion}
-            onFileChange={setArchivoPdf}
-            onError={setFormError}
-          />}
-
-          <ProviderTable
-            contratos={contratos}
-            visibles={visibles}
-            cargando={cargando}
-            esAdministrador={usuario.is_admin}
-            busqueda={busqueda}
-            onBusquedaChange={setBusqueda}
-            onEditar={editar}
-            onEliminar={(proveedor) => void eliminar(proveedor)}
-          />
           <footer className="page-footer">Gestión de proveedores <span>•</span> Coordinación de Logistica</footer>
           <footer className="author-footer">Elaborado por la Coordinación de Logistica</footer>
         </div>

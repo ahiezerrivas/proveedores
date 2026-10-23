@@ -3,6 +3,7 @@ import type { Formulario } from './types'
 export const API_ROOT = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000/api').replace(/\/+$/, '')
 export const PROVEEDORES_URL = `${API_ROOT}/proveedores/`
 export const CONTRATOS_URL = `${API_ROOT}/contratos/`
+export const AUDITORIA_URL = `${API_ROOT}/auditoria/`
 
 export const formatoTarifa = new Intl.NumberFormat('es-CO', {
   minimumFractionDigits: 2,

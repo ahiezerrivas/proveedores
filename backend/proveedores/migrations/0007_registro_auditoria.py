@@ -1,0 +1,44 @@
+import django.db.models.deletion
+from django.conf import settings
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("proveedores", "0006_normalizar_proveedores_y_contratos"),
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name="RegistroAuditoria",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("nombre_usuario", models.CharField(max_length=150)),
+                ("metodo", models.CharField(max_length=10)),
+                ("ruta", models.CharField(max_length=255)),
+                ("codigo_estado", models.PositiveSmallIntegerField()),
+                ("direccion_ip", models.GenericIPAddressField(blank=True, null=True)),
+                ("fecha", models.DateTimeField(auto_now_add=True, db_index=True)),
+                (
+                    "usuario",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="registros_auditoria",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
+            options={"ordering": ["-fecha", "-id"]},
+        ),
+    ]

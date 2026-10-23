@@ -2,12 +2,13 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from proveedores.views import ContratoViewSet, ProveedorViewSet
+from proveedores.views import ContratoViewSet, ProveedorViewSet, RegistroAuditoriaViewSet
 from proveedores.auth_views import auth_state, csrf_cookie, login_view, logout_view
 
 router = DefaultRouter()
 router.register("proveedores", ProveedorViewSet, basename="proveedor")
 router.register("contratos", ContratoViewSet, basename="contrato")
+router.register("auditoria", RegistroAuditoriaViewSet, basename="auditoria")
 
 urlpatterns = [
     path("admin/", admin.site.urls),

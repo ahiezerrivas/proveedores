@@ -3,7 +3,7 @@ from pathlib import PurePosixPath
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import Contrato, Proveedor
+from .models import Contrato, Proveedor, RegistroAuditoria
 
 
 class ProveedorSerializer(serializers.ModelSerializer):
@@ -157,3 +157,17 @@ class ContratoSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         path = f"/api/contratos/{contrato.pk}/pdf/"
         return request.build_absolute_uri(path) if request else path
+
+
+class RegistroAuditoriaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RegistroAuditoria
+        fields = [
+            "id",
+            "nombre_usuario",
+            "metodo",
+            "ruta",
+            "codigo_estado",
+            "direccion_ip",
+            "fecha",
+        ]

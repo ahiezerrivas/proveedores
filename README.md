@@ -36,6 +36,8 @@ python manage.py runserver
 
 La API de proveedores queda en `http://localhost:8000/api/proveedores/` y la de contratos en `http://localhost:8000/api/contratos/`. El acceso a ambas requiere iniciar sesión. Las tarifas se almacenan como números decimales, sin fijar moneda.
 
+La API registra las solicitudes realizadas por usuarios autenticados en `/api/` (incluidos inicio y cierre de sesión), junto con usuario, fecha, método, ruta, resultado e IP. No guarda el contenido de las solicitudes. La consulta paginada está disponible en `/api/auditoria/` exclusivamente para el grupo **Administradores** y superusuarios; en el frontend aparece la sección **Auditoría** solo para ellos.
+
 ### Usuarios y roles
 
 Django crea las tablas de usuarios, grupos/roles y permisos (`auth_user`, `auth_group`, `auth_permission` y sus tablas relacionadas). La migración inicial crea los roles **Administradores** y **Consulta**. Los usuarios autenticados con el rol Consulta pueden consultar proveedores y contratos; solo un superusuario o un usuario del grupo Administradores puede crear y administrar contratos. Al crear un contrato también se puede registrar un proveedor nuevo. Esta regla se aplica en la API, no solo en la interfaz.

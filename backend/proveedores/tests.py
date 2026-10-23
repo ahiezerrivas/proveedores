@@ -8,7 +8,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import Client, TestCase, TransactionTestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Contrato, Proveedor
+from .models import Contrato, Proveedor, RegistroAuditoria
 
 
 class ProveedorModelTests(TestCase):
@@ -411,3 +411,84 @@ class AuthenticationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["user"]["is_admin"])
         self.assertEqual(client.get("/api/auth/session/").json()["authenticated"], True)
+
+
+class RegistroAuditoriaTests(TestCase):
+    def setUp(self):
+        administradores = Group.objects.get(name="Administradores")
+        consulta = Group.objects.get(name="Consulta")
+        self.admin = User.objects.create_user(username="admin", password="test-password")
+        self.admin.groups.add(administradores)
+        self.usuario = User.objects.create_user(username="consulta", password="test-password")
+        self.usuario.groups.add(consulta)
+
+    def test_only_administrators_can_read_audit_records(self):
+        RegistroAuditoria.objects.create(
+            usuario=self.usuario,
+            nombre_usuario=self.usuario.username,
+            metodo="GET",
+            ruta="/api/proveedores/",
+            codigo_estado=200,
+        )
+        client = Client()
+
+        client.force_login(self.usuario)
+        self.assertEqual(client.get("/api/auditoria/").status_code, 403)
+        self.assertTrue(
+            RegistroAuditoria.objects.filter(
+                nombre_usuario="consulta",
+                ruta="/api/auditoria/",
+                codigo_estado=403,
+            ).exists()
+        )
+
+        client.force_login(self.admin)
+        response = client.get("/api/auditoria/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 2)
+        self.assertEqual(response.json()["results"][0]["nombre_usuario"], "consulta")
+
+    def test_api_requests_and_session_actions_are_recorded(self):
+        client = Client()
+        login_response = client.post(
+            "/api/auth/login/",
+            data=json.dumps({"username": "consulta", "password": "test-password"}),
+            content_type="application/json",
+        )
+        self.assertEqual(login_response.status_code, 200)
+        self.assertTrue(
+            RegistroAuditoria.objects.filter(
+                nombre_usuario="consulta",
+                metodo="POST",
+                ruta="/api/auth/login/",
+                codigo_estado=200,
+            ).exists()
+        )
+
+        self.assertEqual(client.get("/api/proveedores/").status_code, 200)
+        self.assertTrue(
+            RegistroAuditoria.objects.filter(
+                nombre_usuario="consulta",
+                metodo="GET",
+                ruta="/api/proveedores/",
+                codigo_estado=200,
+            ).exists()
+        )
+
+        self.assertEqual(client.post("/api/auth/logout/").status_code, 200)
+        self.assertTrue(
+            RegistroAuditoria.objects.filter(
+                nombre_usuario="consulta",
+                metodo="POST",
+                ruta="/api/auth/logout/",
+                codigo_estado=200,
+            ).exists()
+        )
+
+    def test_reading_audit_does_not_create_more_audit_records(self):
+        client = Client()
+        client.force_login(self.admin)
+
+        self.assertEqual(client.get("/api/auditoria/").status_code, 200)
+
+        self.assertFalse(RegistroAuditoria.objects.exists())

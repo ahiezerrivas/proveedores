@@ -33,3 +33,13 @@ export type Usuario = {
   is_admin: boolean
   roles: string[]
 }
+
+export type RegistroAuditoria = {
+  id: number
+  nombre_usuario: string
+  metodo: string
+  ruta: string
+  codigo_estado: number
+  direccion_ip: string | null
+  fecha: string
+}
